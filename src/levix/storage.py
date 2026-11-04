@@ -13,7 +13,7 @@ data-files-bundling exercise.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,7 +56,7 @@ class Database:
         self.path = path
 
     @contextmanager
-    def connect(self) -> Iterable[sqlite3.Connection]:
+    def connect(self) -> Iterator[sqlite3.Connection]:
         """Short-lived connection per call. Never cached: Textual workers each need
         their own, and sqlite3 forbids sharing across threads by default."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -96,7 +96,8 @@ class Database:
                         continue
                     migrate(conn)
                     conn.execute(
-                        f"INSERT INTO {SCHEMA_TABLE} (module, version, applied_at) VALUES (?, ?, ?)",
+                        f"INSERT INTO {SCHEMA_TABLE} (module, version, applied_at)"
+                        " VALUES (?, ?, ?)",
                         (namespace, index, _now()),
                     )
                     applied.append(f"{namespace}:{index}")

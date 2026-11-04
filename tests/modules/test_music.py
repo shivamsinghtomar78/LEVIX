@@ -41,15 +41,24 @@ from levix.storage import Database
 RATE = 44100
 
 
-def tone(freq: float = 440.0, seconds: float = 0.25, amp: float = 0.5, channels: int = 2) -> np.ndarray:
+def tone(
+    freq: float = 440.0, seconds: float = 0.25, amp: float = 0.5, channels: int = 2
+) -> np.ndarray:
     count = int(RATE * seconds)
     step = np.arange(count) / RATE
     wave = (amp * np.sin(2 * np.pi * freq * step)).astype("float32")
     return np.column_stack([wave] * channels)
 
 
-def write_wav(directory: Path, name: str = "tone.wav", *, data: np.ndarray | None = None,
-              rate: int = RATE, subtype: str = "PCM_16", seconds: float = 0.25) -> Path:
+def write_wav(
+    directory: Path,
+    name: str = "tone.wav",
+    *,
+    data: np.ndarray | None = None,
+    rate: int = RATE,
+    subtype: str = "PCM_16",
+    seconds: float = 0.25,
+) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
     sf.write(path, data if data is not None else tone(seconds=seconds), rate, subtype=subtype)
@@ -270,8 +279,9 @@ def test_play_applies_the_configured_volume(run_cli, capsys, wav, seam, levix_ho
     set_config("[music]\nvolume = 0.25\n")
     assert run_cli("music", "play", str(wav)) == 0
     raw, _rate = sf.read(str(wav), dtype="float32", always_2d=True)
-    assert float(np.abs(seam["frames"]).max()) == pytest.approx(float(np.abs(raw).max()) * 0.25,
-                                                                 abs=1e-6)
+    assert float(np.abs(seam["frames"]).max()) == pytest.approx(
+        float(np.abs(raw).max()) * 0.25, abs=1e-6
+    )
     assert "gain 0.25" in both(capsys.readouterr())
 
 
@@ -391,9 +401,7 @@ def test_scan_finds_real_audio_and_reports_what_it_refused(library_tree):
     assert found.skipped_suffix >= 1
     assert [path.name for path, _reason in found.unreadable] == ["broken.wav"]
     assert found.total_duration == pytest.approx(0.3, abs=0.02)
-    assert found.display(library_tree / "deep" / "two.wav") == str(
-        Path("deep") / "two.wav"
-    )
+    assert found.display(library_tree / "deep" / "two.wav") == str(Path("deep") / "two.wav")
 
 
 def test_scan_totals_are_per_holding_folder(library_tree):
@@ -447,7 +455,7 @@ def test_library_command_reports_an_unconfigured_directory(run_cli, capsys, levi
 
 
 def test_library_command_uses_the_configured_root(run_cli, capsys, levix_home, library_tree):
-    set_config(f"[music]\nlibrary_dir = \"{library_tree.as_posix()}\"\n")
+    set_config(f'[music]\nlibrary_dir = "{library_tree.as_posix()}"\n')
     assert run_cli("music", "library") == 0
     assert "one.wav" in both(capsys.readouterr())
 
@@ -469,7 +477,9 @@ def test_the_migration_is_namespaced_music_and_idempotent(db):
     assert core.ensure_schema(db) == ["music:1"]
     assert core.ensure_schema(db) == []
     with db.connect() as conn:
-        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
     assert "music_playlist" in tables
 
 
@@ -615,8 +625,7 @@ def test_module_help_does_not_import_the_optional_dependencies(tmp_path):
         tmp_path,
         "from levix.main import main",
         "code = main(['music', '-h'])",
-        "heavy = [x for x in ('soundfile', 'sounddevice', 'psutil', 'yt_dlp') "
-        "if x in sys.modules]",
+        "heavy = [x for x in ('soundfile', 'sounddevice', 'psutil', 'yt_dlp') if x in sys.modules]",
         "print(code, heavy)",
     )
     assert completed.returncode == 0, completed.stderr

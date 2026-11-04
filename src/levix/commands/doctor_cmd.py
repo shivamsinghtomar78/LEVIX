@@ -13,6 +13,7 @@ from ..capabilities import Status
 from ..context import LevixContext
 from ..errors import ConfigError
 from ..registry import active
+from ..terminal import markup_safe
 
 console = Console()
 console_err = Console(stderr=True)
@@ -49,6 +50,8 @@ def doctor_command(
             raise ConfigError(msg)
         if only == "env":
             findings = doctor_core.environment(context)
+        else:
+            findings = [row for row in findings if row.area.startswith(prefix)]
 
     if as_json:
         typer.echo(
@@ -76,11 +79,13 @@ def doctor_command(
     table.add_column("detail", overflow="fold")
     table.add_column("what to do", overflow="fold")
     for finding in findings:
+        # Both fields carry text LEVIX did not author - a probe's detail names a package,
+        # a hint names an extra - so neither may reach Rich as markup.
         table.add_row(
             finding.area,
             f"[{_STYLE[finding.status]}]{finding.status.value}[/]",
-            finding.detail,
-            finding.hint or "",
+            markup_safe(finding.detail),
+            markup_safe(finding.hint or ""),
         )
     console.print(table)
 

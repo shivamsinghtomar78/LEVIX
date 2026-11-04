@@ -9,8 +9,8 @@ temporary directory afterwards.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 

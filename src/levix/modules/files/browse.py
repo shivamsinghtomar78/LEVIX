@@ -23,7 +23,7 @@ from typing import ClassVar
 from rich.markup import escape
 from textual import events
 from textual.app import App, ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DirectoryTree, Footer, Header, Input, Static
@@ -49,7 +49,7 @@ def show(value: object) -> str:
 class PromptScreen(ModalScreen[str | None]):
     """One-line question whose answer is a path fragment relative to the browser root."""
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel", "Cancel", priority=True),
     ]
     DEFAULT_CSS = """
@@ -93,7 +93,7 @@ class ConfirmScreen(ModalScreen[bool]):
     `False`.
     """
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel", "Cancel", priority=True),
     ]
     DEFAULT_CSS = """
@@ -137,7 +137,7 @@ class ConfirmScreen(ModalScreen[bool]):
 class HelpScreen(ModalScreen[None]):
     """The key list, on screen, without leaving the app."""
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape,enter,q,question_mark", "close", "Close", priority=True),
     ]
     DEFAULT_CSS = """
@@ -175,7 +175,7 @@ class BrowseApp(App[None]):
     #side { width: 3fr; }
     #details { height: 1fr; padding: 1 2; overflow-y: auto; }
     """
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("o", "open", "Open"),
         Binding("p", "preview", "Preview"),
         Binding("c", "copy", "Copy to..."),
@@ -280,7 +280,8 @@ class BrowseApp(App[None]):
         self._dialog_open = True
         self.push_screen(HelpScreen(lines), self._dialog_closed)
 
-    def action_quit(self) -> None:
+    async def action_quit(self) -> None:
+        """`async` to match `App.action_quit`, whose signature Textual's dispatcher awaits."""
         self.exit()
 
     def _dialog_closed(self, _result: object) -> None:

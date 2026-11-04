@@ -20,6 +20,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,8 @@ from ... import terminal
 from ...errors import ConfigError, ExternalToolError, LevixError, ProviderError
 
 CONVERTIBLE = ("mp3", "m4a", "opus", "vorbis", "ogg", "wav", "aac", "flac")
+# `capabilities._player` probes this same order; the core cannot import a module to read
+# this tuple, so the two lists stay in step by agreement, recorded in both places.
 PLAYER_CANDIDATES = ("mpv", "ffplay", "vlc", "mplayer")
 
 # A named format is expanded here, so the alias a user types and the selector yt-dlp
@@ -245,14 +248,14 @@ def build_options(
     return options
 
 
-def _make_ydl(options: dict[str, Any]):
+def _make_ydl(options: dict[str, Any]) -> Any:
     """The only place yt-dlp is imported or instantiated."""
     import yt_dlp
 
     return yt_dlp.YoutubeDL(options)
 
 
-def _run(url: str, options: dict[str, Any], invoke) -> dict[str, Any]:
+def _run(url: str, options: dict[str, Any], invoke: Callable[[Any], Any]) -> dict[str, Any]:
     ydl = _make_ydl(options)
     try:
         result = invoke(ydl)

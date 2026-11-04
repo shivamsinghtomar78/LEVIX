@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.33,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "levix-hello"
+version = "0.1.0"
+description = "Example LEVIX plugin: the smallest module that registers, runs and reports itself."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "LEVIX" }]
+keywords = ["cli", "plugins", "example"]
+classifiers = [
+  "Framework :: Plugin",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+]
+# A plugin depends on the core it registers into. Nothing else: `rich` and `typer` arrive
+# with `levix`, which is why this module's own imports need no extra requirements.
+dependencies = ["levix>=0.4,<1"]
+
+[project.entry-points."levix.plugins"]
+# The group name is the whole registration mechanism; the key becomes `levix hello`.
+hello = "levix_hello:MANIFEST"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/levix_hello"]

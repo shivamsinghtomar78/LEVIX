@@ -39,9 +39,7 @@ def environment(ctx: LevixContext) -> list[Finding]:
         Finding("paths", Status.OK, f"config {ctx.paths.config_dir}"),
         Finding(
             "config",
-            Status.OK
-            if ctx.paths.config_file.exists()
-            else Status.DEGRADED,
+            Status.OK if ctx.paths.config_file.exists() else Status.DEGRADED,
             "user file present"
             if ctx.paths.config_file.exists()
             else f"no user config yet; running on packaged defaults ({ctx.paths.config_file})",
@@ -73,9 +71,7 @@ def modules(registry: ModuleRegistry) -> list[Finding]:
     findings: list[Finding] = []
     for manifest in registry.manifests():
         if is_broken(manifest):
-            findings.append(
-                Finding(f"module:{manifest.name}", Status.MISSING, manifest.summary)
-            )
+            findings.append(Finding(f"module:{manifest.name}", Status.MISSING, manifest.summary))
             continue
         statuses = resolve(manifest.requirements)
         if not statuses:

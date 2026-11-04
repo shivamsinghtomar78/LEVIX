@@ -17,8 +17,12 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from . import terminal
+
+if TYPE_CHECKING:
+    from .paths import Paths
 
 
 class Status(StrEnum):
@@ -96,15 +100,18 @@ def _ffmpeg() -> ProbeResult:
 
 @register("media_player")
 def _player() -> ProbeResult:
-    for candidate in ("mpv", "vlc", "ffplay", "mplayer"):
+    # The same order Tube searches (see `modules/tube/core.PLAYER_CANDIDATES`); core may
+    # not import a module to read it, so the two lists are kept in step by this comment.
+    candidates = ("mpv", "ffplay", "vlc", "mplayer")
+    for candidate in candidates:
         path = shutil.which(candidate)
         if path:
             return ProbeResult("media_player", Status.OK, f"{candidate} at {path}")
     return ProbeResult(
         "media_player",
         Status.MISSING,
-        "no mpv, vlc, ffplay or mplayer on PATH",
-        hint="`levix tube play` downloads then opens the file; install one of these players",
+        f"none of {', '.join(candidates)} is on PATH",
+        hint="`levix tube play` hands a stream URL to a player process; nothing is downloaded",
     )
 
 
@@ -137,7 +144,10 @@ def _psutil() -> ProbeResult:
 def _temperature() -> ProbeResult:
     if not _package_present("psutil"):
         return ProbeResult(
-            "temperature", Status.MISSING, "psutil not installed", hint='pip install "levix[monitor]"'
+            "temperature",
+            Status.MISSING,
+            "psutil not installed",
+            hint='pip install "levix[monitor]"',
         )
     try:
         import psutil
@@ -170,8 +180,11 @@ def _battery() -> ProbeResult:
         return ProbeResult("battery", Status.DEGRADED, f"probe failed: {exc}")
     if life is None:
         return ProbeResult("battery", Status.UNSUPPORTED, "no battery present or reported")
-    return ProbeResult("battery", Status.OK, f"{life.percent:.0f}% "
-                      f"({'plugged in' if life.power_plugged else 'on battery'})")
+    return ProbeResult(
+        "battery",
+        Status.OK,
+        f"{life.percent:.0f}% ({'plugged in' if life.power_plugged else 'on battery'})",
+    )
 
 
 @register("gpu")
@@ -194,10 +207,10 @@ def _keyring() -> ProbeResult:
     backend_id, detail = secrets.backend(_lazy_paths())
     if backend_id == "keyring":
         return ProbeResult("keyring", Status.OK, detail)
-    return ProbeResult("keyring", Status.DEGRADED, detail, hint="pip install \"levix[secrets]\"")
+    return ProbeResult("keyring", Status.DEGRADED, detail, hint='pip install "levix[secrets]"')
 
 
-def _lazy_paths():
+def _lazy_paths() -> Paths:
     from .paths import resolve_paths
 
     return resolve_paths()
@@ -207,9 +220,7 @@ def _lazy_paths():
 def _terminal() -> ProbeResult:
     profile = terminal.detect()
     if not profile.is_tty:
-        return ProbeResult(
-            "terminal", Status.DEGRADED, "stdout is not a TTY (piped or captured)"
-        )
+        return ProbeResult("terminal", Status.DEGRADED, "stdout is not a TTY (piped or captured)")
     if profile.supports_colour and profile.protocol_enabled:
         return ProbeResult(
             "terminal", Status.OK, f"{profile.columns}x{profile.rows}, ANSI colour on"
@@ -219,7 +230,8 @@ def _terminal() -> ProbeResult:
         Status.DEGRADED,
         f"{profile.columns}x{profile.rows}, colour disabled",
         hint=(
-            "legacy Windows consoles need ENABLE_VIRTUAL_TERMINAL_PROCESSING, or set TERM=xterm-256color"
+            "legacy Windows consoles need ENABLE_VIRTUAL_TERMINAL_PROCESSING, "
+            "or set TERM=xterm-256color"
         ),
     )
 

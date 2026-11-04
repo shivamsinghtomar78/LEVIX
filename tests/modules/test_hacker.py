@@ -669,6 +669,57 @@ def test_info_prints_this_machine_and_exits_cleanly(run_cli, capsys):
     assert "Traceback" not in text
 
 
+def _view(**overrides: object) -> core.NetworkView:
+    """A NetworkView with nothing collected, so one field can be rendered on its own."""
+    base: dict[str, object] = {
+        "system": "TestOS",
+        "interface_source": None,
+        "interfaces": (),
+        "routes": (),
+        "gateways": (),
+        "dns": (),
+        "resolution": (),
+        "hosts": None,
+        "suffixes": (),
+        "tools": (),
+        "notes": (),
+    }
+    base.update(overrides)
+    return core.NetworkView(**base)
+
+
+def test_the_tools_table_keeps_the_error_the_os_actually_reported(capsys):
+    """A Windows explanation starts `[WinError 2] `, a POSIX one `[Errno 2] `.
+
+    Rich parses a bare `[...]` as a style tag and deletes it, so the detail column used to
+    print "could not run ipconfig: The system cannot find the file specified" - the sentence
+    with its error code removed. This table exists to name what went wrong.
+    """
+    from levix.modules.hacker import cli
+
+    note = "could not run ipconfig: [WinError 2] The system cannot find the file specified"
+    cli._report_sources(_view(tools=(core.ToolResult.unavailable(["ipconfig", "/all"], note),)))
+    printed = " ".join(capsys.readouterr().out.split())
+    assert "[WinError 2]" in printed, "the error number was consumed as markup"
+    assert "ipconfig /all" in printed
+
+
+def test_a_field_that_looks_like_a_closing_tag_does_not_kill_the_report():
+    """`[/x]` is not deleted by Rich: it raises MarkupError while the table renders.
+
+    A single stray close tag in a name this module never chose would turn `levix hacker
+    network` into a traceback, so the escaping is not cosmetic.
+    """
+    from rich.console import Console
+
+    from levix.modules.hacker import cli
+
+    view = _view(dns=(core.DnsServer(address="10.0.0.[/7]", source="resolv.conf"),))
+    console = Console(record=True, width=120, color_system=None)
+    console.print(cli._dns_table(view))
+    assert "10.0.0.[/7]" in " ".join(console.export_text().split())
+
+
 def test_matrix_stops_at_the_frame_limit(run_cli, capsys):
     assert run_cli("hacker", "matrix", "--iterations", "2", "--fps", "60") == 0
     text = capsys.readouterr().out

@@ -9,7 +9,9 @@ an empty mapping and the renderer says so. Zero is never substituted for unknown
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,10 +202,8 @@ def processes(limit: int = 15) -> list[ProcessRow]:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
         memory_bytes = 0
-        try:
+        with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
             memory_bytes = proc.memory_info().rss or 0
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
         rows.append(
             ProcessRow(
                 pid=info["pid"],
@@ -240,7 +240,7 @@ def temperatures() -> dict[str, list[tuple[str, float, float | None, float | Non
     }
 
 
-def battery():
+def battery() -> Any:
     import psutil
 
     getter = getattr(psutil, "sensors_battery", None)
@@ -264,7 +264,8 @@ def human_bytes(value: float) -> str:
 
 
 def uptime() -> float:
-    import psutil
     import time
+
+    import psutil
 
     return max(0.0, time.time() - psutil.boot_time())

@@ -335,13 +335,13 @@ def render(state: Tetris) -> str:
     inside Rich and inside Textual's writer on U+2588 or box drawing.
     """
     field = [[".."] * COLS for _ in range(ROWS)]
-    for row_index, row in enumerate(state.board):
-        for col_index, value in enumerate(row):
+    for row_index, locked_row in enumerate(state.board):
+        for col_index, value in enumerate(locked_row):
             if value:
                 field[row_index][col_index] = "[]"
     if not state.over:
-        for row, col in state.cells:
-            field[row][col] = "()"
+        for piece_row, piece_col in state.cells:
+            field[piece_row][piece_col] = "()"
     edge = "+" + "-" * (COLS * 2) + "+"
     lines = [edge]
     lines.extend("|" + "".join(row) + "|" for row in field)

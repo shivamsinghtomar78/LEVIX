@@ -10,15 +10,19 @@ prints a non-ASCII glyph.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
 from rich.live import Live
+from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from ...deps import ensure_dependencies
+from ... import terminal
+from ...deps import gate
 from ...errors import ConfigError, ExternalToolError, ProviderError
 from . import MANIFEST, core
 
@@ -31,10 +35,21 @@ PLAYLIST_WARNING = (
 )
 
 
+def _show(value: object) -> str:
+    """Text that came from the site or the filesystem, made safe to print.
+
+    Two crashes are closed here. Rich reads the `[abcdef]` inside a real file name as a
+    style tag and silently eats it, so the report no longer matches the file on disk;
+    and a cp1252 console raises UnicodeEncodeError on the emoji a title carries. Every
+    dynamic value below goes through this, and nothing else is printed raw.
+    """
+    return escape(terminal.encode_safe(value if isinstance(value, str) else str(value)))
+
+
 def _gate(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         return
-    ensure_dependencies(MANIFEST)
+    gate(MANIFEST)
 
 
 def build_app() -> typer.Typer:
@@ -50,7 +65,9 @@ def build_app() -> typer.Typer:
         # Registering from the manifest keeps `levix tube -h` and the dashboard's view
         # of this module from ever disagreeing. Typer's command() has no alias
         # parameter, so a shorthand would have to be registered twice and drift.
-        application.command(command.name, help=command.help)(surface[command.name])
+        # Typer's stub types `command()` only for the literal decorator form; a
+        # manifest-driven lookup is the same object at runtime.
+        application.command(command.name, help=command.help)(surface[command.name])  # type: ignore[type-var]
     return application
 
 
@@ -85,24 +102,25 @@ def info(
 
 
 def _media_table(summary: core.MediaSummary) -> Table:
-    size = (
-        "not reported by this site"
-        if summary.smallest is None
-        else f"{core.human_bytes(summary.smallest)} - {core.human_bytes(summary.largest)}"
-        if summary.smallest != summary.largest
-        else core.human_bytes(summary.largest)
-    )
+    # Both ends of the range are optional: a site that reports no filesize reports none
+    # for every format, and `human_bytes` has no answer for "unknown".
+    if summary.smallest is None or summary.largest is None:
+        size = "not reported by this site"
+    elif summary.smallest == summary.largest:
+        size = core.human_bytes(summary.largest)
+    else:
+        size = f"{core.human_bytes(summary.smallest)} - {core.human_bytes(summary.largest)}"
     table = Table(title="Tube / media", header_style="bold cyan", show_header=False)
     table.add_column("field", style="bold")
     table.add_column("value", overflow="fold")
-    table.add_row("title", summary.title)
-    table.add_row("id", summary.media_id)
-    table.add_row("extractor", summary.extractor)
-    table.add_row("url", summary.webpage_url or "not reported")
-    table.add_row("duration", core.human_clock(summary.duration))
-    table.add_row("uploader", summary.uploader or "not reported")
-    table.add_row("resolution", summary.resolution or "not reported")
-    table.add_row("size range", size)
+    table.add_row("title", _show(summary.title))
+    table.add_row("id", _show(summary.media_id))
+    table.add_row("extractor", _show(summary.extractor))
+    table.add_row("url", _show(summary.webpage_url or "not reported"))
+    table.add_row("duration", _show(core.human_clock(summary.duration)))
+    table.add_row("uploader", _show(summary.uploader or "not reported"))
+    table.add_row("resolution", _show(summary.resolution or "not reported"))
+    table.add_row("size range", _show(size))
     if summary.entry_count is not None:
         table.add_row("entries", str(summary.entry_count))
     return table
@@ -110,7 +128,7 @@ def _media_table(summary: core.MediaSummary) -> Table:
 
 def _formats_table(summary: core.MediaSummary) -> Table:
     table = Table(
-        title=f"Formats for {summary.title} ({len(summary.rows)} reported)",
+        title=f"Formats for {_show(summary.title)} ({len(summary.rows)} reported)",
         header_style="bold cyan",
     )
     for column, width in (
@@ -127,15 +145,15 @@ def _formats_table(summary: core.MediaSummary) -> Table:
     table.add_column("note", overflow="fold")
     for row in summary.rows:
         table.add_row(
-            row.format_id,
-            row.extension,
-            row.resolution,
-            row.fps,
-            row.vcodec,
-            row.acodec,
-            row.bitrate,
-            row.size,
-            row.note,
+            _show(row.format_id),
+            _show(row.extension),
+            _show(row.resolution),
+            _show(row.fps),
+            _show(row.vcodec),
+            _show(row.acodec),
+            _show(row.bitrate),
+            _show(row.size),
+            _show(row.note),
         )
     if not summary.rows:
         table.add_row("-", "-", "no format reported", "-", "-", "-", "-", "-", "-")
@@ -190,8 +208,8 @@ def download(
     )
     core.ensure_output_dir(directory)
     if plan.note:
-        console.print(f"[yellow]note:[/yellow] {plan.note}")
-    console.print(f"[dim]writing to {directory} (from {source})[/dim]")
+        console.print(f"[yellow]note:[/yellow] {_show(plan.note)}")
+    console.print(f"[dim]writing to {_show(directory)} (from {_show(source)})[/dim]")
     if playlist:
         console.print(PLAYLIST_WARNING)
 
@@ -211,8 +229,10 @@ def download(
     _report_download(result, states, directory)
 
 
-def _progress_hook(live: Live, states: list[core.ProgressState]):
-    def hook(raw: dict) -> None:
+def _progress_hook(
+    live: Live, states: list[core.ProgressState]
+) -> Callable[[dict[str, Any]], None]:
+    def hook(raw: dict[str, Any]) -> None:
         state = core.progress_from_hook(raw)
         states.append(state)
         # A captured stream cannot show an animation, so only a real terminal repaints;
@@ -231,7 +251,7 @@ def _report_download(result: dict, states: list[core.ProgressState], directory: 
     destination = Path(path) if path else None
     if destination is not None and not moved and destination.is_file():
         console.print(
-            f"[yellow]already present, nothing was fetched:[/yellow] {path}\n"
+            f"[yellow]already present, nothing was fetched:[/yellow] {_show(path)}\n"
             "[dim]yt-dlp does not overwrite a file it already has; delete it to refetch.[/dim]"
         )
     size = destination.stat().st_size if destination is not None and destination.is_file() else None
@@ -239,10 +259,10 @@ def _report_download(result: dict, states: list[core.ProgressState], directory: 
     table = Table(title="Tube / downloaded", header_style="bold cyan", show_header=False)
     table.add_column("field", style="bold")
     table.add_column("value", overflow="fold")
-    table.add_row("title", summary.title)
-    table.add_row("file", path or f"{directory} (no destination reported)")
-    table.add_row("on disk", core.human_bytes(size) if size is not None else "not reported")
-    table.add_row("format", str(result.get("format") or result.get("format_id") or "-"))
+    table.add_row("title", _show(summary.title))
+    table.add_row("file", _show(path) or f"{_show(directory)} (no destination reported)")
+    table.add_row("on disk", _show(core.human_bytes(size) if size is not None else "not reported"))
+    table.add_row("format", _show(result.get("format") or result.get("format_id") or "-"))
     table.add_row(
         "bytes moved",
         "yes" if moved else "no - the file was already there" if states else "not reported",
@@ -292,8 +312,10 @@ def play(
             "so there is nothing to hand a player. Use `levix tube download` instead."
         )
     argv = core.player_command(found, target)
-    console.print(f"[dim]player:[/dim] {found}  [dim]format:[/dim] {options['format']}")
-    console.print("[dim]running:[/dim] " + " ".join(repr(part) for part in argv))
+    console.print(
+        f"[dim]player:[/dim] {_show(found)}  [dim]format:[/dim] {_show(options['format'])}"
+    )
+    console.print("[dim]running:[/dim] " + _show(" ".join(repr(part) for part in argv)))
     code = core.launch(argv)
     if code != 0:
         raise ExternalToolError(f"{found} exited with code {code}")

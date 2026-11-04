@@ -22,7 +22,7 @@ from rich.table import Table
 
 from ...approve import require_approval
 from ...context import LevixContext
-from ...deps import ensure_dependencies
+from ...deps import gate
 from . import MANIFEST
 from . import scores as store
 from . import snake as snake_rules
@@ -44,7 +44,7 @@ MAX_AUTO = 100000
 def _gate(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         return
-    ensure_dependencies(MANIFEST)
+    gate(MANIFEST)
 
 
 def build_app() -> typer.Typer:
@@ -69,12 +69,14 @@ def build_app() -> typer.Typer:
 def _context(typer_ctx: typer.Context) -> LevixContext:
     """The LEVIX context: paths, configuration and the shared database.
 
-    `levix router` forwards a module's argv into a *fresh* click context, so
-    `typer_ctx.obj` is None for every module command invoked as `levix game ...`;
-    it is only populated when a command runs inside the root context. Rather than
-    inventing a second source of truth, the module asks core to build the same
-    context it built for the root command - the paths and the config come from the
-    identical resolution, so nothing about the user's profile changes.
+    `levix router` forwards the `LevixContext` it was given (`router._forward` passes
+    `obj=ctx.obj`), so a command invoked as `levix game ...` normally reads the very
+    object the root callback built. The fallback below exists for the other way in: a
+    test that builds this Typer app directly, or a debugger running the sub-app, arrives
+    with no parent context. Rather than inventing a second source of truth in that case,
+    the module asks core to build the same context it built for the root command - the
+    paths and the config come from the identical resolution, so nothing about the user's
+    profile changes.
     """
     obj = getattr(typer_ctx, "obj", None)
     if isinstance(obj, LevixContext):
@@ -86,7 +88,7 @@ def _context(typer_ctx: typer.Context) -> LevixContext:
     return context
 
 
-def _database(typer_ctx: typer.Context) -> "Database":
+def _database(typer_ctx: typer.Context) -> Database:
     """The shared database, with this module's migration applied first.
 
     `ensure_schema` registers the `arcade` migration and applies it; both are

@@ -39,7 +39,9 @@ dependencies = [
 [project.optional-dependencies]
 monitor = ["psutil>=7.2,<8"]
 tube = ["yt-dlp>=2026.10.26"]
-music = ["sounddevice>=0.5,<1", "soundfile>=0.14,<1"]
+# numpy is imported directly by music/core.py. soundfile happens to pull it in today, but
+# a dependency the code names has to be declared, not inherited.
+music = ["sounddevice>=0.5,<1", "soundfile>=0.14,<1", "numpy>=2.0,<3"]
 ai = ["httpx>=0.28,<1"]
 secrets = ["keyring>=25.7,<26"]
 all = [
@@ -73,10 +75,10 @@ Source = "https://github.com/shivamsinghtomar78/LEVIX"
 Issues = "https://github.com/shivamsinghtomar78/LEVIX/issues"
 
 [tool.hatch.build.targets.wheel]
+# `packages = ["src/levix"]` already carries every file under the package, data files
+# included. A matching force-include here made hatchling add `levix/data/defaults.toml`
+# twice and the wheel build aborted; nothing extra is needed.
 packages = ["src/levix"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/levix/data" = "levix/data"
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "docs", "plugin-examples", "README.md", "LICENSE", "CHANGELOG.md"]
@@ -116,11 +118,26 @@ ignore = ["S603", "S607"]
 # user input. Reviewed by hand rather than silenced project-wide.
 "src/levix/modules/music/core.py" = ["S608"]
 "src/levix/modules/arcade/scores.py" = ["S608"]
+"src/levix/storage.py" = ["S608"]
+"tests/test_storage.py" = ["S608"]
+# The game tests seed `random.Random` on purpose: the same seed must replay the same
+# board. Nothing here protects a secret, and the only cryptographic randomness in the
+# project is `SystemRandom` in scores.py, which S311 correctly leaves alone.
+"tests/modules/test_arcade.py" = ["S311"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src/levix"]
+# The example plugin is type-checked with the core, because a plugin author copy-pastes
+# it and a broken example is worse than no example.
+files = ["src/levix", "plugin-examples/hello/src"]
 mypy_path = "src"
 strict = false
 warn_unused_ignores = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# None of these four ships a py.typed marker, and their stubs are separate third-party
+# packages. Every one of them is imported lazily behind a capability probe, so a missing
+# stub is a fact about that distribution, not a hole in LEVIX's typing.
+module = ["psutil.*", "yt_dlp.*", "soundfile.*", "sounddevice.*"]
+ignore_missing_imports = true

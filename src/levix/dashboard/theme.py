@@ -1,8 +1,8 @@
 """LEVIX's own themes, and the handshake with `general.theme`.
 
-Textual ships two themes; these three exist so `levix` looks like itself and so the
-`default` value in the packaged configuration maps onto something real. A name the app
-does not know is reported, not silently ignored: a user who set `general.theme` in a file
+Textual ships two themes; the four here exist so `levix` looks like itself and so every
+value the config layer documents as legal maps onto something real. A name the app does
+not know is reported, not silently ignored: a user who set `general.theme` in a file
 deserves to learn that they typed it wrong.
 """
 
@@ -58,15 +58,36 @@ THEMES: tuple[Theme, ...] = (
         panel="#dfe4e1",
         dark=False,
     ),
+    Theme(
+        name="levix-contrast",
+        primary="#ffffff",
+        secondary="#00ffff",
+        warning="#ffff00",
+        error="#ff8080",
+        success="#00ff00",
+        accent="#ffff00",
+        foreground="#ffffff",
+        background="#000000",
+        surface="#000000",
+        panel="#1a1a1a",
+        dark=True,
+    ),
 )
 
 #: `general.theme` ships as "default"; the rest of the table maps prose to a real theme.
+#: Every name in `config.SCHEMA`'s `general.theme` choices has to appear here, or the
+#: dashboard rejects a value the config layer accepted - which is `apply()`'s honesty
+#: path (it reports the refusal in the footer) but still a promise the pair breaks.
+#: `tests/test_dashboard.py::test_every_documented_theme_name_resolves` pins that down.
 ALIASES = {
     "default": "levix-dark",
     "dark": "levix-dark",
+    "hacker": "levix-green",
     "green": "levix-green",
     "matrix": "levix-green",
+    "minimal": "levix-light",
     "light": "levix-light",
+    "high-contrast": "levix-contrast",
 }
 
 

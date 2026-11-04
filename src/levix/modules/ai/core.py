@@ -25,16 +25,21 @@ import subprocess
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
-import httpx
+if TYPE_CHECKING:
+    # httpx is an optional dependency (`levix[ai]`) and every use of it below is a runtime
+    # `import httpx` inside the function that needs it. A module-level import made
+    # `levix ai -h` raise ModuleNotFoundError - exit 1 with a traceback - before
+    # `ensure_dependencies` had a chance to answer with exit 3 and the pip line.
+    import httpx
 
 PROVIDER_OPENAI = "openai-compatible"
 PROVIDER_OLLAMA = "ollama"
 PROVIDERS = (PROVIDER_OPENAI, PROVIDER_OLLAMA)
 
-#: `levix secrets` / env name; `LEVIX_AI_API_KEY` resolves through secrets.py.
+#: The lookup name; `LEVIX_AI_API_KEY` resolves it through secrets.py, `levix ai key set` writes it.
 SECRET_NAME = "AI_API_KEY"  # noqa: S105 - a lookup key name, not a credential
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_MAX_FILE_BYTES = 32_000
@@ -146,11 +151,11 @@ class ApiKey:
         from ...secrets import env_var_for
 
         return ProviderError(
-            f"{config.provider} at {config.root} needs an API key and none was found.\n"
-            f"  set the {env_var_for(SECRET_NAME)} environment variable, or store the key in "
-            f"the OS keyring (service 'levix', user '{SECRET_NAME}') or the file store.",
-            hint="resolution order is env -> keyring -> owner-only file; `levix ai check` shows "
-            "which one answered without revealing the value",
+            f"{config.provider} at {config.root} needs an API key and none was found.",
+            hint=f"set the {env_var_for(SECRET_NAME)} environment variable, run "
+            f"`levix ai key set`, or store the key in the OS keyring (service 'levix', user "
+            f"{SECRET_NAME!r}). Resolution order is env -> keyring -> owner-only file, and "
+            "`levix ai check` shows which one answered without revealing the value",
         )
 
 
@@ -762,7 +767,7 @@ def _ollama_usage(body: dict[str, Any]) -> Usage | None:
     completion = _int(body.get("eval_count"))
     if prompt is None and completion is None:
         return None
-    total = prompt + completion if None not in (prompt, completion) else None
+    total = prompt + completion if prompt is not None and completion is not None else None
     return Usage(prompt_tokens=prompt, completion_tokens=completion, total_tokens=total)
 
 
@@ -799,6 +804,8 @@ def models_url(config: AIConfig) -> str:
 
 
 def httpx_version() -> str:
+    import httpx
+
     return str(getattr(httpx, "__version__", "unknown"))
 
 
@@ -809,6 +816,8 @@ def httpx_version() -> str:
 
 def build_client(*, timeout: float) -> httpx.Client:
     """The only place an httpx.Client is made, so tests can swap in a MockTransport."""
+    import httpx
+
     return httpx.Client(timeout=timeout)
 
 
@@ -862,6 +871,8 @@ def post_completion(
     raw: bool = False,
 ) -> ChatResult:
     """One non-streaming completion: the reply text plus its usage, if it carried any."""
+    import httpx
+
     from ...errors import ProviderError
 
     spec = provider.completion_spec(messages, stream=False, raw=raw)
@@ -893,6 +904,8 @@ def stream_completion(
     sink: Callable[[str], None] | None = None,
 ) -> str:
     """Streamed completion; each chunk is handed to `sink` as it arrives."""
+    import httpx
+
     from ...errors import ProviderError
 
     spec = provider.completion_spec(messages, stream=True)
@@ -923,6 +936,8 @@ def fetch_models(
     provider: Provider,
 ) -> list[ModelEntry] | None:
     """None means "this server does not offer a model list" (HTTP 404), which is normal."""
+    import httpx
+
     from ...errors import ProviderError
 
     spec = provider.models_spec()

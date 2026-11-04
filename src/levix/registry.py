@@ -16,8 +16,15 @@ from __future__ import annotations
 import importlib
 from dataclasses import replace
 from importlib.metadata import EntryPoint, entry_points
+from typing import TYPE_CHECKING, Any
 
 from .module import ModuleManifest, Origin
+
+if TYPE_CHECKING:
+    # Typing only: the registry must not import a module CLI, a screen or Textual to
+    # answer a question about manifests.
+    import typer
+    from textual.screen import Screen
 
 GROUP = "levix.plugins"
 OFFICIAL_DISTRIBUTION = "levix"
@@ -44,7 +51,9 @@ class ModuleRegistry:
             if not isinstance(manifest, ModuleManifest):
                 found[entry_point.name] = _broken(
                     entry_point,
-                    TypeError(f"entry point returned {type(manifest).__name__}, not ModuleManifest"),
+                    TypeError(
+                        f"entry point returned {type(manifest).__name__}, not ModuleManifest"
+                    ),
                 )
                 continue
             provider = ""
@@ -82,12 +91,12 @@ class ModuleRegistry:
     def manifests(self) -> tuple[ModuleManifest, ...]:
         return tuple(self.discover()[name] for name in self.names())
 
-    def build_cli(self, manifest: ModuleManifest):
+    def build_cli(self, manifest: ModuleManifest) -> typer.Typer:
         """The single deferred-import site for module CLIs."""
         factory = _resolve(manifest.cli_path)
         return factory()
 
-    def build_screen(self, manifest: ModuleManifest):
+    def build_screen(self, manifest: ModuleManifest) -> type[Screen]:
         if manifest.ui is None or manifest.ui.screen_path is None:
             msg = f"module {manifest.name!r} declares no dashboard screen"
             raise LookupError(msg)
@@ -107,7 +116,7 @@ def _origin_for(provider: str, name: str) -> Origin:
     return Origin.THIRD_PARTY
 
 
-def _resolve(dotted: str):
+def _resolve(dotted: str) -> Any:
     """Import "levix.modules.tube.cli:build_app"."""
     target, _, attribute = dotted.partition(":")
     module = importlib.import_module(target)
@@ -136,7 +145,7 @@ def _dist_version(entry_point: EntryPoint, origin: Origin) -> str:
         return __version__
     try:
         return entry_point.dist.version if entry_point.dist else ""
-    except Exception:  # noqa: BLE001 - metadata is best effort
+    except Exception:
         return ""
 
 

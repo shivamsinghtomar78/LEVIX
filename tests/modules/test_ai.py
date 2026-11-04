@@ -3,8 +3,8 @@
 Two kinds of test live here. The pure ones assert on what `core` builds and parses, so a
 wire-format regression is a failing test rather than a broken install. The CLI ones drive
 `levix_main` exactly as a user does, with `httpx` pointed at a `MockTransport`: no socket
-is opened and api.openai.com is never contacted. `tests/test_http_path.py`-style real
-sockets are covered by the in-process verification recorded in docs/modules/AI.md.
+is opened and api.openai.com is never contacted. Nothing in this file exercises a real
+network path, which is the point - a provider outage must not be able to fail the suite.
 
 Stdin note: pytest replaces `sys.stdin` with an object that refuses to be read, so
 `_piped_stdin()` returns None and the approval gate always takes the "no terminal" path.
@@ -21,11 +21,13 @@ from pathlib import Path
 
 import httpx
 import pytest
+import typer
 
 from levix import secrets as secrets_module
 from levix.errors import (
     EXIT_CANCELLED,
     EXIT_CONFIG,
+    EXIT_MISSING_DEPENDENCY,
     EXIT_PROVIDER,
     EXIT_TOOL_FAILED,
     EXIT_USAGE,
@@ -111,12 +113,15 @@ def test_manifest_declares_the_real_contract():
     assert MANIFEST.documentation == "docs/modules/AI.md"
     assert MANIFEST.origin is not None
     names = set(MANIFEST.command_names())
-    assert {"ask", "explain", "command", "models", "check"} <= names
+    assert {"ask", "explain", "command", "models", "check", "key"} == names
     assert all(info.help for info in MANIFEST.commands)
     assert MANIFEST.permissions <= frozenset(Permission)
-    assert {Permission.NETWORK, Permission.SECRET_READ, Permission.SUBPROCESS} <= (
-        MANIFEST.permissions
-    )
+    assert {
+        Permission.NETWORK,
+        Permission.SECRET_READ,
+        Permission.SECRET_WRITE,
+        Permission.SUBPROCESS,
+    } <= MANIFEST.permissions
 
 
 # ---------------------------------------------------------------------------------
@@ -595,8 +600,12 @@ def test_resolve_key_refuses_a_remote_host_without_a_key():
     secret_of = lambda name: (None, "none")  # noqa: E731 - a two-line stand-in for ctx.secret
     with pytest.raises(ProviderError) as exc:
         core.resolve_key(config(), secret_of)
-    assert "LEVIX_AI_API_KEY" in exc.value.message
-    assert exc.value.exit_code == EXIT_PROVIDER
+    error = exc.value
+    assert "needs an API key" in error.message
+    assert "\n" not in error.message, "the message is one line; the remedy is the hint"
+    assert "LEVIX_AI_API_KEY" in error.hint
+    assert "levix ai key set" in error.hint
+    assert error.exit_code == EXIT_PROVIDER
 
 
 def test_resolve_key_allows_a_loopback_server_without_a_key():
@@ -744,6 +753,33 @@ def test_models_lists_what_the_provider_reports(run_cli, capsys, monkeypatch):
     assert "listed-model" in capsys.readouterr().out
 
 
+def test_a_model_name_the_server_named_with_brackets_is_printed_whole(run_cli, capsys, monkeypatch):
+    """The models table is the one place this module prints text a remote server chose.
+
+    Unescaped, Rich read `[4]` as a style tag and printed `gpt-mini` for a model named
+    `gpt-[4]mini`, so the command used to discover model names silently rewrote one; a
+    name containing `[/x]` did worse - it raised MarkupError and `levix ai models` died
+    with exit 1 on a server that was answering perfectly.
+    """
+    _install_transport(
+        monkeypatch,
+        lambda request: _json_response(
+            {
+                "data": [
+                    {"id": "gpt-[4]mini", "owned_by": "org[/weird]"},
+                    {"id": "plain-model"},
+                ]
+            }
+        ),
+    )
+    code = run_cli("ai", "models", "--base-url", "http://127.0.0.1:9/v1")
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "gpt-[4]mini" in out, out
+    assert "org[/weird]" in out, out
+    assert "plain-model" in out, out
+
+
 def test_models_degrades_honestly_on_404(run_cli, capsys, monkeypatch):
     _install_transport(monkeypatch, lambda request: httpx.Response(404, text="not found"))
     code = run_cli("ai", "models", "--base-url", "http://127.0.0.1:9/v1")
@@ -849,3 +885,113 @@ def test_ollama_command_uses_generate(run_cli, capsys, monkeypatch):
     assert seen[0].url.path == "/api/generate"
     assert json.loads(seen[0].content.decode())["raw"] is True
     assert "git status" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------------
+# `levix ai key` - the write side of the secret store
+# ---------------------------------------------------------------------------------
+
+
+class RecordingKeyring:
+    """The part of the keyring API `levix ai key` uses, with the calls kept."""
+
+    def __init__(self) -> None:
+        self.saved: list[tuple[str, str, str]] = []
+        self.deleted: list[tuple[str, str]] = []
+
+    def get_password(self, service, name):
+        for saved_service, saved_name, value in self.saved:
+            if (saved_service, saved_name) == (service, name):
+                return value
+        return None
+
+    def set_password(self, service, name, value):
+        self.saved.append((service, name, value))
+
+    def delete_password(self, service, name):
+        self.deleted.append((service, name))
+        self.saved = [row for row in self.saved if (row[0], row[1]) != (service, name)]
+        if not self.saved:
+            raise LookupError("not found")
+
+
+def test_key_set_writes_the_keyring_and_never_prints_the_value(run_cli, capsys, monkeypatch):
+    ring = RecordingKeyring()
+    monkeypatch.delenv("LEVIX_AI_API_KEY", raising=False)
+    monkeypatch.setattr(secrets_module, "_keyring", lambda: ring)
+    monkeypatch.setattr(typer, "prompt", lambda *a, **kw: "sekret-value")
+    assert run_cli("ai", "key", "set") == 0
+    assert ring.saved == [("levix", core.SECRET_NAME, "sekret-value")]
+    printed = capsys.readouterr().out
+    assert "sekret" not in printed, "the value must not appear, not even masked"
+    assert "keyring" in printed
+
+
+def test_key_set_falls_back_to_the_owner_only_file(run_cli, capsys, monkeypatch, context):
+    monkeypatch.delenv("LEVIX_AI_API_KEY", raising=False)
+    monkeypatch.setattr(secrets_module, "_keyring", lambda: None)
+    monkeypatch.setattr(typer, "prompt", lambda *a, **kw: "from-file")
+    assert run_cli("ai", "key", "set") == 0
+    out = capsys.readouterr().out
+    assert "plaintext" in out, "the fallback has to be named as what it is"
+    assert "levix[secrets]" in out
+    assert context.paths.secrets_file.exists()
+    assert context.secret(core.SECRET_NAME) == ("from-file", "file")
+
+
+def test_key_set_refuses_an_empty_entry_without_touching_the_store(run_cli, capsys, monkeypatch):
+    ring = RecordingKeyring()
+    monkeypatch.delenv("LEVIX_AI_API_KEY", raising=False)
+    monkeypatch.setattr(secrets_module, "_keyring", lambda: ring)
+    monkeypatch.setattr(typer, "prompt", lambda *a, **kw: "   ")
+    assert run_cli("ai", "key", "set") == EXIT_CONFIG
+    assert ring.saved == []
+
+
+def test_key_set_without_a_terminal_names_the_environment_variable(run_cli, capsys, monkeypatch):
+    def no_terminal(*args, **kwargs):
+        raise OSError("no console")
+
+    monkeypatch.delenv("LEVIX_AI_API_KEY", raising=False)
+    monkeypatch.setattr(typer, "prompt", no_terminal)
+    assert run_cli("ai", "key", "set") == EXIT_CONFIG
+    assert "LEVIX_AI_API_KEY" in capsys.readouterr().err
+
+
+def test_key_set_with_the_file_store_disabled_is_a_dependency_error(run_cli, capsys, monkeypatch):
+    monkeypatch.delenv("LEVIX_AI_API_KEY", raising=False)
+    monkeypatch.setenv("LEVIX_DISABLE_FILE_SECRETS", "1")
+    monkeypatch.setattr(secrets_module, "_keyring", lambda: None)
+    monkeypatch.setattr(typer, "prompt", lambda *a, **kw: "would-have-been-stored")
+    assert run_cli("ai", "key", "set") == EXIT_MISSING_DEPENDENCY
+    err = capsys.readouterr().err
+    assert "levix[secrets]" in err
+    assert "would-have-been-stored" not in err
+
+
+def test_key_clear_removes_what_key_set_wrote(run_cli, capsys, monkeypatch, context):
+    ring = RecordingKeyring()
+    monkeypatch.delenv("LEVIX_AI_API_KEY", raising=False)
+    monkeypatch.setattr(secrets_module, "_keyring", lambda: ring)
+    monkeypatch.setattr(typer, "prompt", lambda *a, **kw: "to-be-forgotten")
+    assert run_cli("ai", "key", "set") == 0
+    assert context.secret(core.SECRET_NAME)[0] == "to-be-forgotten"
+    assert run_cli("ai", "key", "clear") == 0
+    assert ring.deleted == [("levix", core.SECRET_NAME)]
+    assert "removed" in capsys.readouterr().out
+
+
+def test_key_clear_says_the_environment_still_holds_a_key(run_cli, capsys, monkeypatch):
+    monkeypatch.setenv("LEVIX_AI_API_KEY", "from-env")
+    monkeypatch.setattr(secrets_module, "_keyring", lambda: None)
+    assert run_cli("ai", "key", "clear") == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "LEVIX_AI_API_KEY" in out
+    assert "still in use" in out
+
+
+def test_bare_key_group_shows_its_help_as_usage(run_cli, capsys):
+    assert run_cli("ai", "key") == EXIT_USAGE
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+    assert "set" in combined and "clear" in combined

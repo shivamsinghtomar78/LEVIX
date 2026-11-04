@@ -7,10 +7,10 @@ and the keyboard path can never disagree.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from textual.app import App, ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, Input, ListItem, ListView, Static
 
@@ -18,7 +18,9 @@ from .. import registry as registry_module
 from .. import spawn
 from ..module import ModuleManifest
 from ..registry import active as active_registry
-from . import module_list, theme as theme_module
+from ..terminal import markup_safe
+from . import module_list
+from . import theme as theme_module
 from .history import recent_lines
 
 if TYPE_CHECKING:
@@ -70,7 +72,7 @@ class LevixDashboard(App[None]):
 
     TITLE = "LEVIX"
     CSS = CSS
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("enter", "launch", "run"),
         Binding("space", "describe", "details"),
         Binding("f", "focus_filter", "filter"),
@@ -110,7 +112,7 @@ class LevixDashboard(App[None]):
 
     # ------------------------------------------------------------- rendering
     def refresh_modules(self) -> None:
-        """Re-read the registry. `levix plugins install` in another shell becomes visible."""
+        """Re-read the registry, so a plugin installed into this environment appears."""
         registry = active_registry()
         all_rows = module_list.build_rows(registry)
         self.rows = module_list.filter_rows(all_rows, self._needle)
@@ -146,7 +148,7 @@ class LevixDashboard(App[None]):
         manifest = active_registry().get(row.name)
         panel = self.query_one("#detail", Static)
         if manifest is None:  # pruned between refreshes
-            panel.update(row.summary)
+            panel.update(markup_safe(row.summary))
             return
         panel.update(_describe(manifest, row))
 
@@ -168,10 +170,11 @@ class LevixDashboard(App[None]):
         with self.suspend():
             code = spawn.run(*argv)
         self.refresh_history()
+        shown = markup_safe(" ".join(argv))
         if code:
-            self.notify(f"levix {' '.join(argv)} exited {code}", severity="warning", timeout=5)
+            self.notify(f"levix {shown} exited {code}", severity="warning", timeout=5)
         else:
-            self.notify(f"levix {' '.join(argv)} finished", timeout=3)
+            self.notify(f"levix {shown} finished", timeout=3)
 
     def action_describe(self) -> None:
         self.show_detail()
@@ -237,12 +240,12 @@ class LevixDashboard(App[None]):
             return None
         return self.rows[index]
 
-    def _value(self, dotted: str, fallback):
+    def _value(self, dotted: str, fallback: Any) -> Any:
         if self.context is None:
             return fallback
         try:
             return self.context.value(dotted)
-        except Exception:  # noqa: BLE001 - a missing key must not stop the UI
+        except Exception:
             return fallback
 
     def _config_theme(self) -> str:
@@ -262,28 +265,35 @@ def _argv_for(manifest: ModuleManifest | None, row: ModuleRow) -> tuple[str, ...
 
 
 def _describe(manifest: ModuleManifest, row: ModuleRow) -> str:
-    lines = [f"[bold]{manifest.title}[/bold]  [dim]{manifest.name}[/dim]"]
-    lines.append(manifest.summary)
+    """The detail panel. Every manifest-authored field is escaped on the way in."""
+    lines = [f"[bold]{markup_safe(manifest.title)}[/bold]  [dim]{markup_safe(manifest.name)}[/dim]"]
+    lines.append(markup_safe(manifest.summary))
     if manifest.commands:
         lines.append("")
         for command in manifest.commands:
-            lines.append(f"  [cyan]{command.name:<12}[/cyan]{command.help}")
+            lines.append(
+                f"  [cyan]{markup_safe(command.name):<12}[/cyan]{markup_safe(command.help)}"
+            )
     if manifest.requirements:
         lines.append("")
         lines.append("[bold]packages[/bold]")
         for ref in manifest.requirements:
-            lines.append(f"  {ref.import_name}" + (f" (>= {ref.minimum})" if ref.minimum else ""))
+            name = markup_safe(ref.import_name)
+            minimum = f" (>= {markup_safe(ref.minimum)})" if ref.minimum else ""
+            lines.append(f"  {name}{minimum}")
     if manifest.permissions:
         granted = ", ".join(sorted(str(permission.value) for permission in manifest.permissions))
-        lines.append(f"[bold]permissions[/bold] {granted}")
+        lines.append(f"[bold]permissions[/bold] {markup_safe(granted)}")
     if manifest.documentation:
-        lines.append(f"[bold]docs[/bold] {manifest.documentation}")
+        lines.append(f"[bold]docs[/bold] {markup_safe(manifest.documentation)}")
     if not row.runnable:
         lines.append(f"[yellow]{_why_not(row)}[/yellow]")
     return "\n".join(lines)
 
 
 def _why_not(row: module_list.ModuleRow) -> str:
+    title = markup_safe(row.title)
+    detail = markup_safe(row.detail)
     if row.state == "broken":
-        return f"{row.title} failed to load: {row.detail}"
-    return f"{row.title} needs an install: {row.detail}"
+        return f"{title} failed to load: {detail}"
+    return f"{title} needs an install: {detail}"

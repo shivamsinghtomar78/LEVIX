@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import os
+import sqlite3
 import sys
 import time
 from collections.abc import Callable, Iterable, Sequence
@@ -19,14 +20,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from ... import storage as levix_storage
 from ...errors import EXIT_TOOL_FAILED, EXIT_USAGE, ConfigError, LevixError
 from ...storage import Database
 
 if TYPE_CHECKING:
     import sqlite3
+
+    # numpy is part of `levix[music]`. It is imported inside the four functions that
+    # actually move samples, so that `levix music -h` works on a machine without the
+    # extra and the gate can report exit 3 with the pip line rather than crashing.
+    import numpy as np
 
 NAMESPACE = "music"
 TABLE = "music_playlist"
@@ -305,6 +309,8 @@ def load(path: Path | str, *, volume: float = 1.0) -> tuple[np.ndarray, int, Aud
 
 def apply_gain(frames: np.ndarray, volume: float) -> np.ndarray:
     """Scale, then clamp: 0.0 is silence, 1.0 passes through, and nothing wraps around."""
+    import numpy as np
+
     scaled = np.asarray(frames, dtype=np.float64) * validate_volume(volume)
     return np.clip(scaled, -1.0, 1.0).astype(np.float32)
 
@@ -344,6 +350,8 @@ def resample(frames: np.ndarray, source_rate: int, target_rate: int) -> np.ndarr
     source, target = int(source_rate), validate_rate(target_rate)
     if target == source:
         return frames
+    import numpy as np
+
     data = np.asarray(frames, dtype=np.float64)
     if data.ndim != 2 or data.shape[0] == 0 or source <= 0:
         raise RequestError(f"cannot resample audio of shape {data.shape} from {source} Hz")
@@ -409,6 +417,7 @@ def play_samples(
     `CallbackStop` after the last sample ends the stream. The `with` block closes it on
     every path including Ctrl+C: an interrupted playback must not leave the device busy.
     """
+    import numpy as np
     import sounddevice as sd
 
     data = np.ascontiguousarray(np.asarray(frames, dtype=np.float32))
@@ -625,7 +634,7 @@ def ensure_schema(database: Database) -> list[str]:
     return database.apply_migrations((NAMESPACE,))
 
 
-def _entry(row) -> PlaylistEntry:
+def _entry(row: sqlite3.Row) -> PlaylistEntry:
     return PlaylistEntry(id=int(row["id"]), path=Path(row["path"]), added_at=str(row["added_at"]))
 
 

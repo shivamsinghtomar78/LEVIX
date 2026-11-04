@@ -440,6 +440,11 @@ class ContentHit:
     text: str
 
 
+# One name for "whatever a search yielded", so a caller that picks between the two
+# generators in an if/else keeps a single iterator type instead of a join of two.
+Hit = ContentHit | NameHit
+
+
 def search_names(
     root: Path,
     pattern: str = "",
@@ -451,7 +456,7 @@ def search_names(
     max_depth: int | None = None,
     limit: int | None = None,
     stats: ScanStats | None = None,
-) -> Iterator[NameHit]:
+) -> Iterator[Hit]:
     """Recursive name search. Directories are reported too - an empty tree says so."""
     exts = normalize_extensions(extensions)
     for path, is_dir in walk_paths(
@@ -503,7 +508,7 @@ def search_contents(
     max_bytes: int = DEFAULT_GREP_MAX_BYTES,
     limit: int | None = None,
     stats: ScanStats | None = None,
-) -> Iterator[ContentHit]:
+) -> Iterator[Hit]:
     """Line-oriented content search over the tree.
 
     Skipped, and counted in `stats` rather than hidden: directories, symlinks (their
@@ -832,9 +837,7 @@ def rename_entry(
             f"cannot rename onto the directory {printable(target)}: "
             "remove it first, or move the entry inside it with `levix files move`"
         )
-    _perform(
-        "rename", source, target, os.replace if force else os.rename, source, target
-    )
+    _perform("rename", source, target, os.replace if force else os.rename, source, target)
     size = tree_size(target) if target.is_dir() else file_size(target)
     return OpResult("renamed", source, target, size, force)
 

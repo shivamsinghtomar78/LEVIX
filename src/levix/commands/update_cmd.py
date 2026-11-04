@@ -1,9 +1,9 @@
 """`levix update` - report a newer release, never install it.
 
-Talking to PyPI is the one place LEVIX reaches the network by default, so it is
-disclosed in the output and in docs/security/SECURITY_OVERVIEW.md. Silently upgrading
-a running tool is a supply-chain surprise; LEVIX prints the command and lets you run
-it, which also keeps the behaviour identical under pip, pipx and a frozen build.
+Talking to PyPI is the one place LEVIX reaches the network by default, so it is disclosed
+in the output and in docs/security/THREAT_MODEL.md. Silently upgrading a running tool is a
+supply-chain surprise; LEVIX prints the command and lets you run it, which also keeps the
+behaviour identical under pip, pipx and a frozen build.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ def update_command(
 
 
 def _fetch_latest(timeout: float) -> tuple[str | None, str | None]:
-    request = urllib.request.Request(  # noqa: S310 - fixed https host, no user input
+    request = urllib.request.Request(
         INDEX_URL, headers={"Accept": "application/json", "User-Agent": f"levix/{__version__}"}
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310

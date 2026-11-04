@@ -23,11 +23,30 @@ from rich.table import Table
 from rich.text import Text
 
 from ... import terminal
-from ...deps import ensure_dependencies
+from ...deps import gate
 from ...errors import ConfigError
 from . import MANIFEST, core
 
 console = Console()
+
+
+def _show(value: object) -> str:
+    """Text this machine produced, printed exactly as the machine wrote it.
+
+    Every table below ends up inside Rich markup, and Rich parses `[...]` as a style tag:
+    the `[WinError 2]` at the start of an OS explanation is deleted from the tools table, so
+    the user reads "could not run ipconfig: The system cannot find the file specified" and
+    loses which error it was. A stray `[/...]` is worse - it is not deleted, it raises
+    MarkupError and the command dies. Nothing here authored these strings.
+
+    None renders as the empty string, not `"None"`: these cells are written as
+    `value or "not reported by this platform"`, and an un-sentinel would turn an honest
+    refusal into the word None.
+    """
+    if value is None:
+        return ""
+    return terminal.markup_safe(value)
+
 
 FPS_MIN = 1
 FPS_MAX = 120
@@ -45,7 +64,7 @@ _LEVEL_STYLES: dict[int, str] = {
 def _gate(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         return
-    ensure_dependencies(MANIFEST)
+    gate(MANIFEST)
 
 
 def build_app() -> typer.Typer:
@@ -60,7 +79,9 @@ def build_app() -> typer.Typer:
     for command in MANIFEST.commands:
         # Registering from the manifest is what keeps `levix hacker -h` and the
         # dashboard's list of this module from ever disagreeing.
-        application.command(command.name, help=command.help)(surface[command.name])
+        # Typer's stub types `command()` only for the literal decorator form; a
+        # manifest-driven lookup is the same object at runtime.
+        application.command(command.name, help=command.help)(surface[command.name])  # type: ignore[type-var]
     return application
 
 
@@ -310,14 +331,16 @@ def _host_table(facts: core.HostFacts) -> Table:
     table = Table(title="Hacker / this machine", header_style="bold cyan", show_header=False)
     table.add_column("field", style="bold")
     table.add_column("value", overflow="fold")
-    table.add_row("hostname", f"{facts.hostname} [dim]({facts.hostname_source})[/dim]")
-    table.add_row("system", facts.system or "not reported")
-    table.add_row("release", facts.release or "not reported")
-    table.add_row("version", facts.version or "not reported")
-    table.add_row("machine", facts.machine or "not reported")
-    table.add_row("processor", facts.processor or "not reported")
+    table.add_row(
+        "hostname", f"{_show(facts.hostname)} [dim]({_show(facts.hostname_source)})[/dim]"
+    )
+    table.add_row("system", _show(facts.system) or "not reported")
+    table.add_row("release", _show(facts.release) or "not reported")
+    table.add_row("version", _show(facts.version) or "not reported")
+    table.add_row("machine", _show(facts.machine) or "not reported")
+    table.add_row("processor", _show(facts.processor) or "not reported")
     table.add_row("process id", str(facts.pid))
-    table.add_row("user", f"{facts.user} [dim]({facts.user_source})[/dim]")
+    table.add_row("user", f"{_show(facts.user)} [dim]({_show(facts.user_source)})[/dim]")
     table.add_row(
         "cpu count",
         f"{facts.cpu_count} logical" if facts.cpu_count else "not reported by os.cpu_count()",
@@ -334,9 +357,9 @@ def _python_table(facts: core.HostFacts) -> Table:
     table = Table(title="Interpreter", header_style="bold cyan", show_header=False)
     table.add_column("field", style="bold")
     table.add_column("value", overflow="fold")
-    table.add_row("python", facts.python_version)
-    table.add_row("implementation", facts.python_implementation)
-    table.add_row("executable", facts.executable)
+    table.add_row("python", _show(facts.python_version))
+    table.add_row("implementation", _show(facts.python_implementation))
+    table.add_row("executable", _show(facts.executable))
     return table
 
 
@@ -348,21 +371,23 @@ def _terminal_table(facts: core.HostFacts, view: core.NetworkView) -> Table:
     table.add_column("value", overflow="fold")
     table.add_row("size", f"{term.columns} x {term.lines}")
     table.add_row("stream", "tty" if term.isatty else "not a tty (captured or redirected)")
-    table.add_row("encoding", term.encoding)
-    table.add_row("TERM", term.term)
+    table.add_row("encoding", _show(term.encoding))
+    table.add_row("TERM", _show(term.term))
     table.add_row(
         "glyph mode",
         f"{set_['block']} block glyphs available"
         if set_["block"] != "#"
         else "# ASCII fallback (this stream cannot encode block glyphs)",
     )
-    table.add_row("interface source", view.interface_source or "not available on this platform")
+    table.add_row(
+        "interface source", _show(view.interface_source) or "not available on this platform"
+    )
     return table
 
 
 def _interface_table(view: core.NetworkView) -> Table:
     table = Table(
-        title=f"Local interfaces ({view.interface_source or 'no source available'})",
+        title=f"Local interfaces ({_show(view.interface_source) or 'no source available'})",
         header_style="bold cyan",
     )
     table.add_column("name", overflow="fold", max_width=34)
@@ -372,10 +397,10 @@ def _interface_table(view: core.NetworkView) -> Table:
     table.add_column("dhcp")
     for interface in view.interfaces:
         table.add_row(
-            interface.name,
-            interface.reported_state,
-            interface.reported_mac,
-            interface.addresses_text,
+            _show(interface.name),
+            _show(interface.reported_state),
+            _show(interface.reported_mac),
+            _show(interface.addresses_text),
             "-" if interface.dhcp is None else ("yes" if interface.dhcp else "no"),
         )
     if not view.interfaces:
@@ -418,10 +443,10 @@ def _gateway_table(view: core.NetworkView) -> Table:
         else:
             shown = gateway.address or "not available on this platform"
         table.add_row(
-            shown,
-            gateway.interface or "-",
+            _show(shown),
+            _show(gateway.interface) or "-",
             "-" if gateway.metric is None else str(gateway.metric),
-            gateway.source,
+            _show(gateway.source),
         )
     if not view.gateways:
         table.add_row(
@@ -436,11 +461,11 @@ def _dns_table(view: core.NetworkView) -> Table:
     table.add_column("server", overflow="fold")
     table.add_column("source", overflow="fold")
     for position, server in enumerate(view.dns, start=1):
-        table.add_row(str(position), server.address, server.source)
+        table.add_row(str(position), _show(server.address), _show(server.source))
     if not view.dns:
         table.add_row("-", "[cyan]not available on this platform[/cyan]", "no source listed one")
     if view.suffixes:
-        table.add_row("", "search suffixes", ", ".join(view.suffixes))
+        table.add_row("", "search suffixes", _show(", ".join(view.suffixes)))
     return table
 
 
@@ -451,7 +476,9 @@ def _resolution_table(view: core.NetworkView) -> Table:
     table.add_column("detail", overflow="fold")
     table.add_column("evidence", overflow="fold")
     for step in view.resolution:
-        table.add_row(str(step.position), step.label, step.detail, step.evidence)
+        table.add_row(
+            str(step.position), _show(step.label), _show(step.detail), _show(step.evidence)
+        )
     if not view.resolution:
         table.add_row("-", "[cyan]not available on this platform[/cyan]", "-", "-")
     return table
@@ -470,12 +497,12 @@ def _route_table(view: core.NetworkView) -> Table:
     table.add_column("source")
     for route in view.routes:
         table.add_row(
-            route.destination,
-            route.prefix or "-",
-            route.gateway or "directly connected",
-            route.interface or "-",
+            _show(route.destination),
+            _show(route.prefix) or "-",
+            _show(route.gateway) or "directly connected",
+            _show(route.interface) or "-",
             "-" if route.metric is None else str(route.metric),
-            route.source,
+            _show(route.source),
         )
     if not view.routes:
         table.add_row(
@@ -504,13 +531,13 @@ def _report_sources(view: core.NetworkView) -> None:
         else:
             colour, status = "red", "missing"
         table.add_row(
-            " ".join(result.argv),
+            _show(" ".join(result.argv)),
             f"[{colour}]{status}[/{colour}]",
-            core.describe_tool(result),
+            _show(core.describe_tool(result)),
         )
     console.print(table)
 
 
 def _report_notes(view: core.NetworkView) -> None:
     for note in view.missing_data_notes():
-        console.print(f"[yellow]note:[/yellow] {note}")
+        console.print(f"[yellow]note:[/yellow] {_show(note)}")

@@ -1,8 +1,10 @@
 """`levix ai` command surface.
 
-httpx is only reached through `core`, and `ensure_dependencies` has proved it exists
-before Typer calls in here. Nothing in this file prints a key, and nothing runs a command
-without putting it through `levix.approve.require_approval` first.
+httpx is reached only through `core`, and `core` imports it inside the functions that use
+it, so importing this file - which is what `levix ai -h` does - succeeds even when
+`levix[ai]` is not installed. `ensure_dependencies` then answers with exit 3 and the pip
+line instead of a ModuleNotFoundError traceback. Nothing in this file prints a key, and
+nothing runs a command without putting it through `levix.approve.require_approval` first.
 
 Windows consoles are cp1252, so every glyph comes from `terminal.active_glyphs()` or from
 `rich.box.ASCII`; model text is printed with markup and highlighting off, because a reply
@@ -11,6 +13,7 @@ containing `[bold]` is data, not a style directive.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -25,8 +28,9 @@ from rich.text import Text
 from ... import terminal
 from ...approve import require_approval
 from ...context import LevixContext
-from ...deps import ensure_dependencies
-from ...secrets import env_var_for
+from ...deps import gate
+from ...errors import ConfigError, DependencyError
+from ...secrets import SERVICE, env_var_for
 from . import MANIFEST, core
 
 console = Console()
@@ -48,7 +52,21 @@ _SHOW_USAGE = typer.Option(False, "--show-usage", help="Print token counts if re
 def _gate(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         return
-    ensure_dependencies(MANIFEST)
+    gate(MANIFEST)
+
+
+def _show(value: object) -> str:
+    """Text this command did not author, printed as it arrived.
+
+    Two failures are closed here. Rich reads a `[...]` inside a model name, a URL or a
+    path as a style tag and deletes it - a `[/...]` does not get deleted, it raises
+    `MarkupError` and the command dies - and a cp1252 console raises `UnicodeEncodeError`
+    on a model name written in a script it cannot encode. `levix ai check` and
+    `levix ai models` are the commands you run to find out what is really configured and
+    what the server really calls itself, so a rendering that quietly drops a bracketed
+    path segment is the worst possible answer from the tool that is supposed to be honest.
+    """
+    return escape(terminal.encode_safe(str(value)))
 
 
 def build_app() -> typer.Typer:
@@ -59,14 +77,29 @@ def build_app() -> typer.Typer:
         callback=_gate,
         context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100},
     )
-    surface = {"ask": ask, "explain": explain, "command": command, "models": models, "check": check}
+    surface = {
+        "ask": ask,
+        "explain": explain,
+        "command": command,
+        "models": models,
+        "check": check,
+        "key": key_app,
+    }
     for info in MANIFEST.commands:
         # Registering from the manifest keeps `levix ai -h` and the dashboard's list of
         # this module unable to disagree.
-        function = surface[info.name]
-        application.command(info.name, help=info.help)(function)
+        target = surface[info.name]
+        if isinstance(target, typer.Typer):
+            # `key` is a group: two commands that share one subject, not one more flat
+            # name with a verb baked into it.
+            application.add_typer(target, name=info.name, help=info.help)
+            continue
+        # Typer's stub types `command()` for a function written under the decorator;
+        # a name looked up from the manifest is the same object at runtime, and mypy
+        # cannot see past the indirection.
+        application.command(info.name, help=info.help)(target)  # type: ignore[type-var]
         for alias in info.aliases:
-            application.command(alias, help=info.help, hidden=True)(function)
+            application.command(alias, help=info.help, hidden=True)(target)  # type: ignore[type-var]
     return application
 
 
@@ -78,11 +111,12 @@ def build_app() -> typer.Typer:
 def _obj(typer_ctx: typer.Context) -> LevixContext:
     """The shared LevixContext: the parent's when click passes one, else build it.
 
-    `levix <module>` forwards argv into a fresh click invocation (see levix.router), so a
-    module command normally arrives with `ctx.obj is None`. `ai` cannot run on guessed
-    defaults - provider, URL and key all come from the user's configuration - so it builds
-    the same context the root callback builds. Nothing is cached: a cached context would
-    pin the paths and config of whichever command ran first.
+    `levix <module>` forwards `obj=ctx.obj` (see levix.router), so a command invoked as
+    `levix ai ...` normally reads the context the root callback already built. The
+    fallback is for a test or debugger that runs this sub-app on its own: `ai` cannot run
+    on guessed defaults - provider, URL and key all come from the user's configuration -
+    so it builds the same context the root callback builds. Nothing is cached: a cached
+    context would pin the paths and config of whichever command ran first.
     """
     obj = getattr(typer_ctx, "obj", None)
     if isinstance(obj, LevixContext):
@@ -144,8 +178,8 @@ def _report_usage(result: core.ChatResult, show_usage: bool) -> None:
             "(streamed responses do not include them)[/dim]"
         )
         return
-    model = f"  model {escape(result.model)}" if result.model else ""
-    console.print(f"[dim]usage: {escape(result.usage.describe())}{model}[/dim]")
+    model = f"  model {_show(result.model)}" if result.model else ""
+    console.print(f"[dim]usage: {_show(result.usage.describe())}{model}[/dim]")
 
 
 # ---------------------------------------------------------------------------------
@@ -240,7 +274,7 @@ def explain(
     for snippet in snippets:
         notice = snippet.notice()
         if notice:
-            console.print(f"[yellow]{escape(notice)}[/yellow]")
+            console.print(f"[yellow]{_show(notice)}[/yellow]")
 
     config, prov = _provider(
         typer_ctx, provider, model, base_url, ollama_url, temperature, max_tokens, timeout
@@ -293,7 +327,7 @@ def command(
     _report_usage(result, show_usage)
 
     if proposal.rejected:
-        console.print(f"[yellow]no command offered:[/yellow] {escape(proposal.rejected)}")
+        console.print(f"[yellow]no command offered:[/yellow] {_show(proposal.rejected)}")
         console.print("nothing has run.")
         return
 
@@ -318,7 +352,7 @@ def command(
             "[bold yellow]ai.require_approval is false: running the proposal without asking, "
             "because your configuration opted out of the gate.[/bold yellow]"
         )
-    console.print(f"[cyan]running:[/cyan] {escape(detail)}")
+    console.print(f"[cyan]running:[/cyan] {_show(detail)}")
     core.run_proposal(proposal.argv, timeout=config.timeout)
     console.print("[green]the command finished with exit code 0[/green]")
 
@@ -367,13 +401,13 @@ def models(
 
     if listed is None:
         console.print(
-            f"[yellow]{escape(prov.models_spec().url)} answered HTTP 404.[/yellow] This server "
+            f"[yellow]{_show(prov.models_spec().url)} answered HTTP 404.[/yellow] This server "
             "does not implement a model list, which is common for OpenAI-compatible gateways; "
             "nothing is guessed."
         )
         console.print(
-            f"configured model: [bold]{escape(config.model or '(unset)')}[/bold] at "
-            f"{escape(config.root)}"
+            f"configured model: [bold]{_show(config.model or '(unset)')}[/bold] at "
+            f"{_show(config.root)}"
         )
         return
 
@@ -381,13 +415,13 @@ def models(
     table.add_column("model", overflow="fold")
     table.add_column("detail", overflow="fold")
     for entry in listed:
-        table.add_row(entry.name, entry.detail or "-")
+        table.add_row(_show(entry.name), _show(entry.detail or "-"))
     if not listed:
         table.add_row("[cyan]the provider answered with an empty list[/cyan]", "-")
     console.print(table)
     if config.model and all(entry.name != config.model for entry in listed):
         console.print(
-            f"[yellow]note:[/yellow] configured model {escape(config.model)!r} is not in this "
+            f"[yellow]note:[/yellow] configured model {_show(config.model)!r} is not in this "
             "list; check `levix ai check`."
         )
 
@@ -425,11 +459,21 @@ def check(
     table.add_column("value", overflow="fold")
     source = "command line flag" if provider else obj.config.source("ai.provider")
     table.add_row("provider", f"{config.provider} [dim](ai.provider source: {source})[/dim]")
-    table.add_row("model", config.model or "[yellow](unset)[/yellow]")
-    table.add_row("base url", config.base_url or "[yellow](unset)[/yellow]")
-    table.add_row("ollama url", config.ollama_url or "[yellow](unset)[/yellow]")
-    table.add_row("completion url", core.completion_url(config))
-    table.add_row("models url", core.models_url(config))
+    # These five rows are the user's own configuration read back at them, so they carry the
+    # same treatment the rest of this file gives to text it did not author: a base URL with
+    # a bracketed path segment would otherwise print without that segment, and `check` is
+    # the command you run to find out why the real requests are going somewhere else.
+    table.add_row("model", _show(config.model) if config.model else "[yellow](unset)[/yellow]")
+    table.add_row(
+        "base url",
+        _show(config.base_url) if config.base_url else "[yellow](unset)[/yellow]",
+    )
+    table.add_row(
+        "ollama url",
+        _show(config.ollama_url) if config.ollama_url else "[yellow](unset)[/yellow]",
+    )
+    table.add_row("completion url", _show(core.completion_url(config)))
+    table.add_row("models url", _show(core.models_url(config)))
     table.add_row("temperature", f"{config.temperature}")
     table.add_row("max tokens", f"{config.max_tokens}")
     table.add_row("timeout", f"{config.timeout:g}s")
@@ -462,7 +506,89 @@ def check(
         console.print("[dim]no request was sent; pass --live for one read-only probe.[/dim]")
         return
 
-    provider = core.provider_for(config, core.resolve_key(config, obj.secret))
+    prov = core.provider_for(config, core.resolve_key(config, obj.secret))
     with core.build_client(timeout=config.timeout) as client:
-        report = core.ping(client, provider)
-    console.print(f"[green]live:[/green] {escape(report)}")
+        report = core.ping(client, prov)
+    console.print(f"[green]live:[/green] {_show(report)}")
+
+
+# ---------------------------------------------------------------------------------
+# key
+# ---------------------------------------------------------------------------------
+
+key_app = typer.Typer(
+    name="key",
+    help="Store or forget the provider API key.",
+    no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100},
+)
+
+
+def _prompt_key() -> str:
+    """One line, read with echoing off.
+
+    The key is deliberately not a command-line argument: argv lands in shell history, in
+    the process list and in any crash report that carries it. A machine with no terminal
+    to prompt in gets a refusal that names the environment variable instead, because the
+    wrong answer here is to accept the key from a pipe and echo it back.
+    """
+    try:
+        return typer.prompt(f"{core.SECRET_NAME} (hidden input)", hide_input=True).strip()
+    except (EOFError, OSError, RuntimeError) as exc:
+        msg = (
+            "there is no terminal here to type into, so the key cannot be prompted for. "
+            f"Set {env_var_for(core.SECRET_NAME)} in the environment, or run "
+            "`levix ai key set` from an interactive shell."
+        )
+        raise ConfigError(msg) from exc
+
+
+@key_app.command("set")
+def key_set(typer_ctx: typer.Context) -> None:
+    """Store the key in the OS keyring, falling back to the owner-only file."""
+    obj = _obj(typer_ctx)
+    value = _prompt_key()
+    if not value:
+        msg = "no key entered - nothing was stored"
+        raise ConfigError(msg, hint="run `levix ai key set` again and enter the real key")
+    try:
+        where = obj.store_secret(core.SECRET_NAME, value)
+    except RuntimeError as exc:
+        # `secrets.set_secret` raises this when there is no keyring *and* the plaintext
+        # store is switched off by LEVIX_DISABLE_FILE_SECRETS. The way out is the extra.
+        msg = str(exc)
+        raise DependencyError(msg, hint='pip install "levix[secrets]"') from exc
+    if where == "keyring":
+        console.print(
+            f"[green]stored[/green] {core.SECRET_NAME} in the OS keyring "
+            f"[dim](service {SERVICE!r}); it is not in any file LEVIX writes.[/dim]"
+        )
+        return
+    name = core.SECRET_NAME
+    target = _show(obj.paths.secrets_file)
+    console.print(f"[yellow]stored[/yellow] {name} in {target} with owner-only permissions.")
+    # `escape()` is not decoration: Rich reads the `[secrets]` inside the pip extra as a
+    # style tag and deletes it, which turns the remedy into a command that installs nothing.
+    remedy = escape('pip install "levix[secrets]"')
+    console.print(
+        "[dim]That file is access-controlled plaintext, not encryption. `levix doctor` "
+        f"reports it as DEGRADED; {remedy} and this command again puts the key in the OS "
+        "keyring instead.[/dim]"
+    )
+
+
+@key_app.command("clear")
+def key_clear(typer_ctx: typer.Context) -> None:
+    """Delete the stored key from the keyring and the file store."""
+    obj = _obj(typer_ctx)
+    removed = obj.forget_secret(core.SECRET_NAME)
+    env_name = env_var_for(core.SECRET_NAME)
+    if removed:
+        console.print(f"[green]removed[/green] the stored {core.SECRET_NAME}.")
+    else:
+        console.print(f"nothing was stored for {core.SECRET_NAME}; nothing removed.")
+    if os.environ.get(env_name):
+        console.print(
+            f"[yellow]note:[/yellow] {env_name} is set in this environment and is checked "
+            "before any store, so a key is still in use until you unset it in the shell."
+        )

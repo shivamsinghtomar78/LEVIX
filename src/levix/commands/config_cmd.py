@@ -17,11 +17,15 @@ from ..config import (
 )
 from ..context import LevixContext
 from ..errors import ConfigError
+from ..terminal import markup_safe
 
 config_app = typer.Typer(help="Read and write LEVIX configuration.", no_args_is_help=True)
 console = Console()
 
-_MASK = "[set, hidden]"
+#: Markup-free on purpose: this lands in a Rich table cell, where `[set, hidden]` is a
+#: style tag and renders as nothing at all - the value column looks empty instead of
+#: telling the user a secret is there. `markup_safe` is applied at the cell anyway.
+_MASK = "set, hidden"
 
 
 def _ctx(typer_ctx: typer.Context) -> LevixContext:
@@ -43,7 +47,14 @@ def show(typer_ctx: typer.Context) -> None:
     for row in context.config.resolved():
         value = _MASK if (is_secret_key(row.dotted) and row.value not in (None, "")) else row.value
         source = row.source
-        table.add_row(row.dotted, str(value), source, str(context.paths.config_file))
+        # A configured path or model name is not markup; a value with brackets in it would
+        # otherwise lose the bracketed part on the way to the screen.
+        table.add_row(
+            markup_safe(row.dotted),
+            markup_safe(value),
+            markup_safe(source),
+            markup_safe(context.paths.config_file),
+        )
     console.print(table)
 
 
@@ -64,7 +75,9 @@ def get(typer_ctx: typer.Context, dotted: str) -> None:
     context = _ctx(typer_ctx)
     value = context.value(dotted)
     if is_secret_key(dotted) and value:
-        console.print(f"[yellow]{dotted} is secret-shaped; use the secrets store.[/yellow]")
+        console.print(
+            f"[yellow]{markup_safe(dotted)} is secret-shaped; use the secrets store.[/yellow]"
+        )
     typer.echo(value)
 
 
@@ -73,14 +86,15 @@ def set_value(
     typer_ctx: typer.Context,
     dotted: str,
     value: str,
-    yes: bool = typer.Option(False, "--yes", "-y", help="Do not prompt."),
 ) -> None:
     """Persist one override into config.toml, preserving comments and ordering."""
     context = _ctx(typer_ctx)
     if is_secret_key(dotted):
+        env_name = "LEVIX_" + dotted.upper().replace(".", "_").replace("-", "_")
         msg = (
             f"{dotted} looks like a credential. Configuration files are plain text; "
-            "store it with `levix ai key set` or the LEVIX_AI_API_KEY environment variable."
+            "store the AI provider key with `levix ai key set`, or put any secret in the "
+            f"environment as {env_name}."
         )
         raise ConfigError(msg)
     stored = write_user_value(context.paths, dotted, value)
@@ -100,7 +114,7 @@ def unset(typer_ctx: typer.Context, dotted: str) -> None:
 @config_app.command("reset")
 def reset(
     typer_ctx: typer.Context,
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Cannot skip this confirmation."),
 ) -> None:
     """Delete config.toml, returning to packaged defaults."""
     context = _ctx(typer_ctx)
@@ -108,14 +122,18 @@ def reset(
     if not path.exists():
         typer.echo(f"nothing to reset: {path} does not exist")
         raise typer.Exit(code=0)
-    if not yes:
-        from ..approve import require_approval
+    from ..approve import require_approval
 
-        require_approval(
-            "delete your configuration file",
-            str(path),
-            destructive=True,
-        )
+    # `--yes` is passed in, not honoured: this deletes the user's configuration, and
+    # `require_approval` refuses to let a flag authorise a destructive action. Before this
+    # line existed, `levix config reset --yes` was the one destructive command that could
+    # be run without a terminal.
+    require_approval(
+        "delete your configuration file",
+        str(path),
+        assume_yes=yes,
+        destructive=True,
+    )
     backup = path.with_suffix(".toml.bak")
     backup.write_bytes(path.read_bytes())
     path.unlink()
@@ -160,7 +178,7 @@ def edit(typer_ctx: typer.Context) -> None:
     if not editor:
         editor = "notepad" if sys.platform.startswith("win") else "vi"
     try:
-        subprocess.run([editor, str(config_file)], check=False)  # noqa: S603
+        subprocess.run([editor, str(config_file)], check=False)
     except OSError as exc:
         msg = f"could not start editor {editor!r}: {exc}"
         raise ConfigError(msg) from exc

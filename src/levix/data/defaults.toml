@@ -1,10 +1,8 @@
 [general]
 theme = "default"
-confirm_destructive = true
 history_limit = 50
 
 [dashboard]
-show_system_info = true
 recent_commands = 10
 
 [monitor]

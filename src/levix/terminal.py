@@ -105,13 +105,49 @@ def active_glyphs() -> dict[str, str]:
     return glyphs(detect())
 
 
-def bar(percent: float, width: int = 20, *, low: str = "green", mid: str = "yellow",
-        high: str = "red") -> str:
+def bar(
+    percent: float, width: int = 20, *, low: str = "green", mid: str = "yellow", high: str = "red"
+) -> str:
     """A Rich-markup usage bar that is safe on any codepage."""
     set_ = active_glyphs()
-    filled = max(0, min(width, int(round(percent / 100 * width))))
+    filled = max(0, min(width, round(percent / 100 * width)))
     colour = low if percent < 60 else (mid if percent < 85 else high)
     return (
         f"[{colour}]{set_['block'] * filled}{set_['dash'] * (width - filled)}[/{colour}] "
         f"{percent:5.1f}%"
     )
+
+
+def encode_safe(text: str) -> str:
+    """`text` rewritten so this stream can carry it, on one line.
+
+    The same win32 writer that rejects U+2588 also rejects the emoji and non-Latin
+    names a remote site puts in a title, so text that arrives from outside the
+    terminal has to be adapted before it is handed to Rich. Unencodable characters
+    come back as `\\uXXXX` escapes and control characters as `\\xNN`: the value stays
+    readable and comparable instead of crashing the command that prints it.
+    """
+    one_line = "".join(
+        char if (char.isprintable() and char != "\x7f") else f"\\x{ord(char):02x}" for char in text
+    )
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        one_line.encode(encoding)
+    except (UnicodeEncodeError, LookupError):
+        one_line = one_line.encode(encoding, "backslashreplace").decode(encoding, "replace")
+    return one_line
+
+
+def markup_safe(value: object) -> str:
+    """`value` ready to interpolate into a Rich markup string.
+
+    Rich parses `[...]` as a style tag and silently deletes it along with what is inside,
+    so the pip extra in an install hint (`levix[tube]`) prints as `levix`, a bracketed
+    filename loses its bracket, and a plugin's own summary loses whatever it wrote in
+    brackets. This bites every string the core did not author: manifests, hints, package
+    statuses, command history. Line breaks are left alone - tables fold them - because
+    only `encode_safe` is about what the stream can carry.
+    """
+    from rich.markup import escape
+
+    return escape(str(value))

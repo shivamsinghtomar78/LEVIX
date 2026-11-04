@@ -6,7 +6,8 @@ only reaches when someone actually types `levix ai ...`.
 
 The security posture this module promises: a model-proposed command is never executed
 without a typed confirmation in a real terminal, `--yes` cannot buy that confirmation,
-and the API key is read through `levix.secrets` and never printed, logged or echoed.
+and the API key is read through `levix.secrets` and never printed, logged or echoed -
+neither on the way in (`key set` prompts without echo) nor on the way out.
 """
 
 from __future__ import annotations
@@ -38,6 +39,10 @@ MANIFEST = ModuleManifest(
             "check",
             "Provider, URL, key source and options; --live adds one read-only request.",
         ),
+        CommandInfo(
+            "key",
+            "Set or clear the provider API key in the OS keyring; the value is never shown.",
+        ),
     ),
     requirements=(
         PackageRef(
@@ -50,6 +55,7 @@ MANIFEST = ModuleManifest(
         {
             Permission.NETWORK,
             Permission.SECRET_READ,
+            Permission.SECRET_WRITE,
             Permission.FS_READ,
             Permission.SUBPROCESS,
         }

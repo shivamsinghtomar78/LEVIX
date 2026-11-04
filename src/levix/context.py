@@ -43,6 +43,17 @@ class LevixContext:
             self.logger.debug("secret %s resolved from %s", name, source)
         return value, source
 
+    def store_secret(self, name: str, value: str) -> str:
+        """Write a credential and return the store used. The value never reaches a log."""
+        where = secrets.set_secret(name, value, paths=self.paths)
+        self.logger.debug("secret %s stored in %s", name, where)
+        return where
+
+    def forget_secret(self, name: str) -> bool:
+        removed = secrets.delete_secret(name, paths=self.paths)
+        self.logger.debug("secret %s forgotten (removed=%s)", name, removed)
+        return removed
+
     def glyph(self, key: str) -> str:
         from .terminal import glyphs
 

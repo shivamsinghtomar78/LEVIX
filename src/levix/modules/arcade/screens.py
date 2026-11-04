@@ -20,7 +20,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from textual.app import App, ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingType
 from textual.containers import Vertical
 from textual.widgets import Footer, Header, Static
 
@@ -44,7 +44,7 @@ class _GameApp(App[None]):
     #hud { height: 1; padding: 0 1; }
     #board { height: auto; padding: 0 1; }
     """
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("p", "pause", "Pause", priority=True),
         Binding("r", "again", "Play again", priority=True),
         Binding("q,escape", "quit_app", "Quit", priority=True),
@@ -182,7 +182,7 @@ class SnakeApp(_GameApp):
     """`levix game snake`: arrows or WASD steer, `q`/Esc quits, `r` starts a new round."""
 
     GAME = "snake"
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         *_GameApp.BINDINGS,
         Binding("up,w", "steer('up')", "Up", priority=True),
         Binding("down,s", "steer('down')", "Down", priority=True),
@@ -235,7 +235,7 @@ class SnakeApp(_GameApp):
                 f"{self.state.length}  tick {self.interval_seconds():.2f}s  seed {self.seed}"
             )
 
-    def action_steer(self, direction: str) -> None:
+    def action_steer(self, direction: snake_rules.Direction) -> None:
         """Queue a heading; the next tick is what actually moves the snake."""
         if not self._paused and self.state.alive:
             self.state = snake_rules.turn(self.state, direction)
@@ -246,7 +246,7 @@ class TetrisApp(_GameApp):
     """`levix game tetris`: left/right move, up rotates, down softens, space drops."""
 
     GAME = "tetris"
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         *_GameApp.BINDINGS,
         Binding("left,a", "slide(-1)", "Left", priority=True),
         Binding("right,d", "slide(1)", "Right", priority=True),

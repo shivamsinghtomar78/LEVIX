@@ -9,10 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal
-
-if TYPE_CHECKING:
-    import typer
+from typing import Literal
 
 
 class Origin(StrEnum):
@@ -28,7 +25,11 @@ class Permission(StrEnum):
     FS_WRITE = "fs_write"
     SUBPROCESS = "subprocess"
     AUDIO = "audio"
-    SECRET_READ = "secret_read"
+    # A permission name, not a credential: S105 reads the `SECRET` prefix as an assignment.
+    SECRET_READ = "secret_read"  # noqa: S105
+    # Kept separate from SECRET_READ on purpose: "this module can read your keys" and
+    # "this module can replace them" are different things to a user deciding to install it.
+    SECRET_WRITE = "secret_write"  # noqa: S105
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,18 +117,6 @@ class ModuleManifest:
             return f'pip install "levix[{extra}]"' if extra else None
         if not self.provider:
             return None
-        return f'pip install "{self.provider}[{extra}]"' if extra else f"pip install {self.provider}"
-
-
-class LevixModuleProtocol:
-    """The shape `levix create-module` scaffolds.
-
-    Declared as a plain base rather than a Protocol so that generated templates get
-    a concrete thing to inherit while editors still surface the required members.
-    """
-
-    def manifest(self) -> ModuleManifest:
-        raise NotImplementedError
-
-    def build_command(self) -> typer.Typer:
-        raise NotImplementedError
+        return (
+            f'pip install "{self.provider}[{extra}]"' if extra else f"pip install {self.provider}"
+        )

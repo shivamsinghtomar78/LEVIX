@@ -19,7 +19,6 @@ from .errors import (
 )
 from .module import (
     CommandInfo,
-    LevixModuleProtocol,
     ModuleManifest,
     Origin,
     PackageRef,
@@ -34,7 +33,6 @@ __all__ = [
     "ExternalToolError",
     "LevixContext",
     "LevixError",
-    "LevixModuleProtocol",
     "ModuleManifest",
     "Origin",
     "PackageRef",

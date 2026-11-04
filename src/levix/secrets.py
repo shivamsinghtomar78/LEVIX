@@ -8,11 +8,13 @@ pretending the user's API key is encrypted at rest.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import stat
 import subprocess
 from pathlib import Path
+from types import ModuleType
 
 from .paths import Paths
 
@@ -24,7 +26,7 @@ def env_var_for(name: str) -> str:
     return f"{_ENV_PREFIX}{name.upper()}"
 
 
-def _keyring():
+def _keyring() -> ModuleType | None:
     """Return the keyring module if importable, else None. Never imports it blindly."""
     import importlib.util
 
@@ -80,13 +82,13 @@ def set_secret(name: str, value: str, *, paths: Paths) -> str:
     """Store a secret, preferring the OS keyring. Returns the store actually used."""
     kr = _keyring()
     if kr is not None:
-        try:
+        # A keyring that refuses (locked collection, no daemon) is the documented reason the
+        # file store exists, so the failure is expected control flow, not something to log.
+        with contextlib.suppress(Exception):
             kr.set_password(SERVICE, name, value)
             # If a previous run fell back to the file, do not leave a stale copy.
             _file_delete(paths.secrets_file, name)
             return "keyring"
-        except Exception:
-            pass
 
     if os.environ.get("LEVIX_DISABLE_FILE_SECRETS") == "1":
         msg = (
@@ -106,11 +108,9 @@ def delete_secret(name: str, *, paths: Paths) -> bool:
     removed = False
     kr = _keyring()
     if kr is not None:
-        try:
+        with contextlib.suppress(Exception):
             kr.delete_password(SERVICE, name)
             removed = True
-        except Exception:
-            pass
     removed = _file_delete(paths.secrets_file, name) or removed
     return removed
 
@@ -133,15 +133,13 @@ def _write_file(path: Path, data: dict[str, str]) -> None:
 
 def _harden(path: Path) -> None:
     """Owner-only access. POSIX chmod plus a Windows ACL reset."""
-    try:
+    with contextlib.suppress(OSError):
         path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:
-        pass
     if os.name == "nt":
         try:
             user = os.environ.get("USERNAME") or os.environ.get("USER")
             if user:
-                subprocess.run(  # noqa: S603 - fixed argv, no shell
+                subprocess.run(
                     [
                         "icacls",
                         str(path),

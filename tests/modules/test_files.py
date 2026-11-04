@@ -334,8 +334,7 @@ def test_search_reports_directories_and_labels_them(tree):
 
 def test_search_extension_filter(tree):
     names = [
-        h.path.name
-        for h in core.search_names(tree, "", extensions=["txt"], stats=core.ScanStats())
+        h.path.name for h in core.search_names(tree, "", extensions=["txt"], stats=core.ScanStats())
     ]
     assert sorted(names) == ["a.txt", "legacy.txt"], "the hidden dot-file is not searched"
     both_ext = [
@@ -358,9 +357,7 @@ def test_search_hidden_option_reaches_the_dot_file(tree):
     assert list(core.search_names(tree, "alpha-hidden", stats=without)) == []
     assert without.skipped_hidden >= 1
     with_hidden = core.ScanStats()
-    found = list(
-        core.search_names(tree, "alpha-hidden", include_hidden=True, stats=with_hidden)
-    )
+    found = list(core.search_names(tree, "alpha-hidden", include_hidden=True, stats=with_hidden))
     assert [h.path.name for h in found] == [HIDDEN_NAME]
 
 
@@ -999,6 +996,28 @@ def test_search_with_grep_reports_the_skips_it_made(run_cli, capsys, sandbox):
     assert HIDDEN_NAME not in text
 
 
+def test_max_bytes_zero_means_no_cap(run_cli, capsys, sandbox):
+    """`--max-bytes` advertises "0 = no cap", so a file above the packaged default
+    must still be searched at 0 and still be skipped at the default."""
+    big = sandbox / "big.txt"
+    big.write_text(
+        "x" * core.DEFAULT_GREP_MAX_BYTES + "\nalpha at the end\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert big.stat().st_size > core.DEFAULT_GREP_MAX_BYTES
+
+    assert run_cli("files", "search", ".", "--grep", "alpha at", "--max-bytes", "0") == 0
+    text = both(capsys.readouterr())
+    assert "big.txt" in text
+    assert "over the size cap" not in text
+
+    assert run_cli("files", "search", ".", "--grep", "alpha at") == 0
+    text = both(capsys.readouterr())
+    assert "big.txt" not in text
+    assert "over the size cap" in text
+
+
 def test_search_hidden_flag_reaches_the_dot_file(run_cli, capsys, sandbox):
     assert run_cli("files", "search", ".", "--include-hidden", "--grep", "alpha") == 0
     assert HIDDEN_NAME in both(capsys.readouterr())
@@ -1329,9 +1348,7 @@ def test_browse_open_expands_a_directory_and_previews_a_file(tmp_path):
         await pilot.press("enter")
         await _settle(pilot)
         folder = next(
-            node
-            for node in app.query_one("#tree").root.children
-            if node.data.path.name == "folder"
+            node for node in app.query_one("#tree").root.children if node.data.path.name == "folder"
         )
         assert folder.is_expanded, "enter expands"
         assert [node.data.path.name for node in folder.children] == ["x.txt"]
@@ -1350,4 +1367,3 @@ def test_browse_open_expands_a_directory_and_previews_a_file(tmp_path):
 
     _drive(app, go)
     assert app._exception is None
-

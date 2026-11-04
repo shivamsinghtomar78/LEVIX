@@ -20,7 +20,7 @@ pip install -e ".[dev,all]"
 pre-commit install
 ```
 
-## The two rules that shape everything else
+## The three rules that shape everything else
 
 1. **The core stays light.** `levix` itself depends on typer, rich, textual, click,
    platformdirs and tomlkit only. A module dependency belongs in a PEP 621 extra, and
@@ -29,7 +29,13 @@ pre-commit install
 2. **A module is data plus a lazy factory.** Export a `ModuleManifest` from
    `__init__.py` and build the Typer app in `cli.py`. Importing heavy packages at
    module scope breaks `levix --help`, which is a test failure, not a style opinion -
-   see `tests/test_lazy_loading.py`.
+   see `tests/test_router.py::test_help_forwarding_does_not_import_a_heavy_dependency`,
+   which runs the real entry point in a child interpreter and inspects its `sys.modules`.
+3. **Text the core did not write is escaped before it is printed.** An install hint
+   (`pip install "levix[tube]"`), a plugin's summary, a filename, a line of command
+   history: Rich reads `[...]` as a style tag and deletes it. Use
+   `levix.terminal.markup_safe` when interpolating into a markup string, or print with
+   `markup=False`. `tests/test_markup_safety.py` is the regression net.
 
 ## Development workflow
 
@@ -37,8 +43,9 @@ pre-commit install
 ruff check src tests
 ruff format src tests
 mypy src/levix
-pytest                          # unit + CLI tests, no network
-pytest -m integration           # real end-to-end flows
+pytest                          # all 698 cases; no network, no real TTY
+pytest -m integration           # only the 8 that touch a device or a real OS tool
+pytest -m "not integration"     # the CI-safe subset (690 cases)
 levix doctor
 ```
 
@@ -51,9 +58,10 @@ config loader raises if the two disagree, on purpose.
 
 - Branch from `main`, one concern per branch.
 - If the change alters an architectural decision, add an ADR to `docs/decisions/`
-  using `ADR_TEMPLATE.md`. ADRs record why, not just what.
+  using `docs/decisions/ADR_TEMPLATE.md`. ADRs record why, not just what.
 - Update docs in the same commit as code. Documentation that contradicts behaviour is
-  treated as a bug, per `docs/development/CODING_STANDARDS.md`.
+  treated as a bug; `docs/requirements/NON_FUNCTIONAL_REQUIREMENTS.md` and this file are
+  the standards a review is measured against.
 - Run the full check set before opening the pull request and paste the output.
 
 ## Adding a module (or a plugin)

@@ -63,7 +63,7 @@ with code `3`. LEVIX never prints an `ImportError` traceback at you.
 - **No silent installs.** `levix update` reports a newer release and prints the command;
   it does not modify your environment.
 - **No claim that plugins are sandboxed.** A Python plugin runs with LEVIX's full
-  privileges. See [docs/plugins/PLUGIN_SECURITY.md](docs/plugins/PLUGIN_SECURITY.md).
+  privileges. See [docs/security/THREAT_MODEL.md](docs/security/THREAT_MODEL.md).
 
 ## Extend it
 
@@ -75,7 +75,8 @@ levix plugins list
 
 The scaffolded package exports a `ModuleManifest` (pure data) and a lazily imported
 Typer app — the same two things every official module provides.
-[docs/plugins/PLUGIN_SDK.md](docs/plugins/PLUGIN_SDK.md) is the reference.
+[docs/architecture/PLUGIN_ARCHITECTURE.md](docs/architecture/PLUGIN_ARCHITECTURE.md) is
+the reference.
 
 ## Documentation
 
@@ -86,7 +87,7 @@ plugin SDK, security model, and the phase roadmap.
 
 Version 0.4.0 delivers the core engine, the dashboard and all seven official modules.
 The plugin *install* workflow, CI matrices and standalone binaries are scheduled in
-[docs/roadmap/MASTER_ROADMAP.md](docs/roadmap/MASTER_ROADMAP.md) — they are not
+[docs/roadmap/CURRENT_STATUS.md](docs/roadmap/CURRENT_STATUS.md) — they are not
 implemented yet, and this README does not pretend otherwise.
 
 ## License

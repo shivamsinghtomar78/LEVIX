@@ -1147,8 +1147,14 @@ def _posix_account() -> tuple[str | None, str]:
     except ImportError:
         return None, "the pwd module is unavailable"
     try:
-        uid = os.getuid()
-        return pwd.getpwuid(uid).pw_name, f"pwd entry for uid {uid}"
+        # Looked up by name rather than as an attribute: typeshed defines `os.getuid` and
+        # the whole `pwd` module only for POSIX, so a checker running on Windows sees
+        # neither and rejects the direct form. B009 wants the constant-`getattr` gone, and
+        # its rewrite is exactly what breaks the check this line exists to pass.
+        getuid = getattr(os, "getuid")  # noqa: B009
+        getpwuid = getattr(pwd, "getpwuid")  # noqa: B009
+        uid = getuid()
+        return getpwuid(uid).pw_name, f"pwd entry for uid {uid}"
     except (OSError, KeyError, AttributeError) as exc:
         return None, f"pwd lookup failed ({exc})"
 
@@ -1411,7 +1417,7 @@ def _collect_windows(notes: list[str], tools: list[ToolResult]) -> NetworkView:
     dns = _dedupe_dns(_dns_from_interfaces(interfaces))
     suffixes = _dedupe(
         [
-            summary.primary_dns_suffix if summary else "",
+            (summary.primary_dns_suffix or "") if summary else "",
             *(interface.suffix or "" for interface in interfaces),
         ]
     )

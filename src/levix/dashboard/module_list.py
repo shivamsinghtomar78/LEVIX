@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Literal
 
 from ..deps import missing
 from ..registry import is_broken
+from ..terminal import markup_safe
 
 if TYPE_CHECKING:
     from ..module import ModuleManifest
@@ -37,11 +38,16 @@ class ModuleRow:
         return self.state == "ready"
 
     def label(self) -> str:
-        """One line for the list: name, summary, and the state word in colour."""
+        """One line for the list: name, summary, and the state word in colour.
+
+        Name and summary come from a manifest someone else wrote, so they are escaped on
+        the way into the markup - a plugin cannot restyle the dashboard or hide text in
+        brackets that the core then silently deletes.
+        """
         colour = {"ready": "green", "extra": "yellow", "broken": "red"}[self.state]
         width = max(len(self.name), 1)
         return (
-            f"[bold]{self.name:<{width}}[/bold]  {self.summary}  "
+            f"[bold]{markup_safe(self.name):<{width}}[/bold]  {markup_safe(self.summary)}  "
             f"[{colour}]{STATE_MARK[self.state]}[/{colour}]"
         )
 
@@ -92,8 +98,4 @@ def filter_rows(rows: list[ModuleRow], needle: str) -> list[ModuleRow]:
     text = needle.strip().casefold()
     if not text:
         return rows
-    return [
-        row
-        for row in rows
-        if text in " ".join((row.name, row.title, row.summary)).casefold()
-    ]
+    return [row for row in rows if text in " ".join((row.name, row.title, row.summary)).casefold()]

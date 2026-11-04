@@ -13,7 +13,8 @@ import pytest
 from textual.widgets import Input, ListItem, ListView, Static
 
 from levix import registry as registry_module
-from levix.dashboard import module_list, theme as theme_module
+from levix.dashboard import module_list
+from levix.dashboard import theme as theme_module
 from levix.dashboard.app import LevixDashboard, _argv_for
 from levix.errors import EXIT_USAGE
 from levix.module import CommandInfo, ModuleManifest, Origin, PackageRef, Permission, UiSpec
@@ -146,8 +147,13 @@ def stub_registry():
     return stub
 
 
-async def _focus_list(app: LevixDashboard) -> None:
-    """Keys are for the list, not the filter: an Input swallows printable characters."""
+async def _focus_list(app: LevixDashboard, pilot) -> None:
+    """Keys are for the list, not the filter: an Input swallows printable characters.
+
+    The pause comes first because the rows mount on the event loop; setting an index on a
+    list that has not mounted yet selects nothing, and the key press that follows is lost.
+    """
+    await pilot.pause()
     app.query_one("#modules", ListView).focus()
 
 
@@ -155,6 +161,10 @@ def test_dashboard_lists_every_module_and_reflects_the_filter(levix_home, stub_r
     app = LevixDashboard()
 
     async def steps(pilot):
+        # `ListView.append` mounts its children on the event loop, so the count is only
+        # stable once a pause has drained that. Without it this assert races the mount and
+        # fails roughly once in a full-suite run.
+        await pilot.pause()
         list_view = app.query_one("#modules", ListView)
         assert len(list_view.children) == 3
         labels = [str(child.children[0].render()) for child in list_view.children]
@@ -166,6 +176,7 @@ def test_dashboard_lists_every_module_and_reflects_the_filter(levix_home, stub_r
         await pilot.pause()
         assert len(app.rows) == 1
         assert app.rows[0].name == "monitor"
+        await pilot.pause()
         assert len(app.query_one("#modules", ListView).children) == 1
 
     _drive(app, steps)
@@ -179,7 +190,7 @@ def test_enter_on_a_ready_row_runs_the_same_command_line(levix_home, stub_regist
     app = LevixDashboard()
 
     async def steps(pilot):
-        await _focus_list(app)
+        await _focus_list(app, pilot)
         # Not index 0: `ghost` sorts first, and it is the row that must refuse to run.
         app.query_one("#modules", ListView).index = [r.name for r in app.rows].index("monitor")
         await pilot.pause()
@@ -200,7 +211,7 @@ def test_enter_on_an_unavailable_row_says_why_instead_of_running_it(
     app = LevixDashboard()
 
     async def steps(pilot):
-        await _focus_list(app)
+        await _focus_list(app, pilot)
         index = [row.name for row in app.rows].index("ghost")
         app.query_one("#modules", ListView).index = index
         await pilot.pause()
@@ -212,12 +223,29 @@ def test_enter_on_an_unavailable_row_says_why_instead_of_running_it(
     _drive(app, steps)
 
 
+def test_every_documented_theme_name_resolves():
+    """`config.SCHEMA` and `dashboard.theme` must describe the same vocabulary.
+
+    The config layer validates against its own choices list and the dashboard validates
+    against its registered themes; nothing joined them, so `general.theme = "hacker"` was
+    accepted by `levix config set` and then refused by the app.
+    """
+    from levix.config import SCHEMA
+
+    known = {t.name for t in theme_module.THEMES}
+    choices = SCHEMA["general"]["theme"].choices
+    assert choices is not None
+    mapped = {theme_module.ALIASES.get(name, name) for name in choices}
+    missing = sorted(mapped - known)
+    assert not missing, f"config offers themes the dashboard cannot apply: {missing}"
+
+
 def test_theme_binding_cycles_only_through_registered_themes(levix_home, stub_registry):
     app = LevixDashboard()
     seen: list[str] = []
 
     async def steps(pilot):
-        await _focus_list(app)
+        await _focus_list(app, pilot)
         for _ in range(4):
             await pilot.press("t")
             await pilot.pause()
@@ -247,7 +275,7 @@ def test_history_can_be_hidden_without_touching_the_log(context, stub_registry):
     app = LevixDashboard(context)
 
     async def steps(pilot):
-        await _focus_list(app)
+        await _focus_list(app, pilot)
         await pilot.press("h")
         await pilot.pause()
         assert str(app.query_one("#history", Static).render()) == ""
@@ -270,8 +298,9 @@ def test_rows_render_as_list_items(levix_home, stub_registry):
     app = LevixDashboard()
 
     async def steps(pilot):
-        del pilot
+        await pilot.pause()
         children = list(app.query_one("#modules", ListView).children)
+        assert len(children) == 3, "an empty list would make the assertion below vacuous"
         assert all(isinstance(child, ListItem) for child in children)
 
     _drive(app, steps)

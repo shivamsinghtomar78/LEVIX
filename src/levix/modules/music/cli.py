@@ -15,12 +15,13 @@ from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from ... import terminal
 from ...approve import require_approval
 from ...context import LevixContext
-from ...deps import ensure_dependencies
+from ...deps import gate
 from ...errors import EXIT_INTERRUPTED, LevixError
 from . import MANIFEST, core
 
@@ -40,7 +41,7 @@ playlist_app = typer.Typer(
 def _gate(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         return
-    ensure_dependencies(MANIFEST)
+    gate(MANIFEST)
 
 
 def build_app() -> typer.Typer:
@@ -65,7 +66,9 @@ def build_app() -> typer.Typer:
         if isinstance(target, typer.Typer):
             application.add_typer(target, name=command.name, help=command.help)
         else:
-            application.command(command.name, help=command.help)(target)
+            # Typer's stub types `command()` only for the literal decorator form; a
+            # manifest-driven lookup is the same object at runtime.
+            application.command(command.name, help=command.help)(target)  # type: ignore[type-var]
     return application
 
 
@@ -78,8 +81,10 @@ def _ctx(typer_ctx: typer.Context) -> LevixContext:
     obj = getattr(typer_ctx, "obj", None)
     if isinstance(obj, LevixContext):
         return obj
-    # The router forwards into a fresh click context, so a module command does not
-    # inherit the root one. Building it here is what honours music.volume/library_dir.
+    # The router forwards `obj=ctx.obj`, so a real `levix music ...` takes the branch
+    # above. This one is for a test or a debugger that runs the sub-app with no parent:
+    # building the context here is what still honours music.volume/library_dir instead of
+    # silently reading built-in defaults.
     from ...app import build_context
 
     return build_context()
@@ -99,9 +104,18 @@ def _prepare(file: Path, *, gain: float, rate: int) -> tuple[np.ndarray, int, co
     return frames, samplerate, info
 
 
+def _show(value: object) -> str:
+    """A name from disk or PortAudio, printed as written.
+
+    Rich reads the `[live]` inside a real file name as a style tag and deletes it, and
+    `core.safe_text` covers the encoding half. Both belong to every dynamic value below.
+    """
+    return escape(core.safe_text(value if isinstance(value, str) else str(value)))
+
+
 def _line(info: core.AudioInfo, samplerate: int, gain: float) -> str:
     return (
-        f"[bold]{core.safe_name(info.path.name)}[/bold]  {info.format}/{info.subtype or '-'}  "
+        f"[bold]{_show(info.path.name)}[/bold]  {info.format}/{info.subtype or '-'}  "
         f"{samplerate} Hz  {info.channels} ch  {core.format_duration(info.duration)}  "
         f"gain {gain:.2f}"
     )
@@ -109,7 +123,7 @@ def _line(info: core.AudioInfo, samplerate: int, gain: float) -> str:
 
 def _clip(text: str, width: int) -> str:
     """Truncate with ASCII, never Rich's U+2026: a cp1252 console cannot encode it."""
-    safe = core.safe_text(text)
+    safe = _show(text)
     return safe if len(safe) <= width else safe[: width - 1] + "+"
 
 
@@ -196,7 +210,7 @@ def info(file: Path = typer.Argument(..., help="One audio file.")) -> None:
     table = Table(title="Audio file", header_style="bold cyan", show_header=False)
     table.add_column("field", style="bold")
     table.add_column("value", overflow="fold")
-    table.add_row("path", core.safe_name(report.path))
+    table.add_row("path", _show(report.path))
     table.add_row("format", f"{report.format} / {report.subtype or '-'}")
     table.add_row("samplerate", f"{report.samplerate:,} Hz")
     table.add_row("channels", str(report.channels))
@@ -242,7 +256,7 @@ def devices(
         table.add_row(
             str(row.index),
             _clip(row.name, 44),
-            row.host_api,
+            _show(row.host_api),
             str(row.max_input),
             str(row.max_output),
             f"{row.default_samplerate:,.0f}",
@@ -263,8 +277,8 @@ def devices(
     console.print(table)
     console.print(
         f"[dim]{len(rows)} of {len(listing.rows)} device(s) shown; "
-        f"default output: {listing.name_of(listing.default_output)}; "
-        f"default input: {listing.name_of(listing.default_input)}[/dim]"
+        f"default output: {_show(listing.name_of(listing.default_output))}; "
+        f"default input: {_show(listing.name_of(listing.default_input))}[/dim]"
     )
     note = listing.note()
     if note:
@@ -314,9 +328,7 @@ def library(
             core.human_bytes(track.size_bytes),
         )
     if not found.tracks:
-        table.add_row(
-            f"[cyan]no playable file under {core.safe_name(base)}[/cyan]", "-", "-", "-", "-", "-"
-        )
+        table.add_row(f"[cyan]no playable file under {_show(base)}[/cyan]", "-", "-", "-", "-", "-")
     console.print(table)
 
     folders = found.by_directory()
@@ -345,9 +357,7 @@ def library(
             "but did not decode:[/yellow]"
         )
         for path, reason in found.unreadable[:8]:
-            console.print(
-                f"  [red]x[/red] {_clip(found.display(path), 52)}: {core.safe_text(reason)}"
-            )
+            console.print(f"  [red]x[/red] {_clip(found.display(path), 52)}: {_show(reason)}")
         if len(found.unreadable) > 8:
             console.print(f"  [dim]... {len(found.unreadable) - 8} more[/dim]")
     if found.skipped_hidden and not include_hidden:
@@ -369,9 +379,12 @@ def playlist_list(typer_ctx: typer.Context) -> None:
     table.add_column("added")
     table.add_column("state")
     for entry in queue:
+        # Clipping an absolute path from the left keeps its directories and cuts off the
+        # part that names the file, which on a Windows temp path is everything after
+        # character 40. The name carries the row; the folder is the disambiguating detail.
         table.add_row(
             str(entry.id),
-            _clip(core.safe_name(entry.path), 56),
+            f"{_clip(entry.path.name, 40)}\n[dim]{_clip(str(entry.path.parent), 40)}[/dim]",
             entry.added_at,
             "ok" if entry.exists else "[red]missing[/red]",
         )
@@ -389,9 +402,9 @@ def playlist_add(
     """Queue files, rejecting names that are not real files before anything is stored."""
     result = core.add_to_playlist(_ctx(typer_ctx).database, files)
     for entry in result.added:
-        console.print(f"[green]+[/green] {entry.id}  {core.safe_name(entry.path)}")
+        console.print(f"[green]+[/green] {entry.id}  {_show(entry.path)}")
     for name in result.duplicate:
-        console.print(f"[yellow]=[/yellow] already queued: {core.safe_text(name)}")
+        console.print(f"[yellow]=[/yellow] already queued: {_show(name)}")
     console.print(f"[dim]added {len(result.added)}, already queued {len(result.duplicate)}[/dim]")
 
 
@@ -403,7 +416,7 @@ def playlist_remove(
     """Drop rows by id."""
     removed, missing = core.remove_from_playlist(_ctx(typer_ctx).database, ids)
     for entry in removed:
-        console.print(f"[red]-[/red] {entry.id}  {core.safe_name(entry.path)}")
+        console.print(f"[red]-[/red] {entry.id}  {_show(entry.path)}")
     for wanted in missing:
         console.print(f"[yellow]![/yellow] no playlist row with id {wanted}")
     console.print(f"[dim]{len(removed)} removed, {len(missing)} not found[/dim]")
@@ -451,13 +464,13 @@ def playlist_play(
     played = skipped = 0
     for entry in queue:
         if not entry.exists:
-            console.print(f"[yellow]skipped[/yellow] {core.safe_name(entry.path)}: gone from disk")
+            console.print(f"[yellow]skipped[/yellow] {_show(entry.path)}: gone from disk")
             skipped += 1
             continue
         try:
             frames, samplerate, report = _prepare(entry.path, gain=gain, rate=rate)
         except LevixError as exc:
-            console.print(f"[yellow]skipped[/yellow] {core.safe_name(entry.path)}: {exc.message}")
+            console.print(f"[yellow]skipped[/yellow] {_show(entry.path)}: {_show(exc.message)}")
             skipped += 1
             continue
         console.print(_line(report, samplerate, gain))

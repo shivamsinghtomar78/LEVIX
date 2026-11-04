@@ -67,9 +67,10 @@ def _version_tuple(text: str) -> tuple[int, ...] | None:
 def _dist_for(import_name: str) -> str | None:
     """Map an import name to its distribution name, e.g. yt_dlp -> yt-dlp."""
     try:
-        return (packages_distributions().get(import_name) or [None])[0]
+        found = packages_distributions().get(import_name)
     except Exception:
         return None
+    return found[0] if found else None
 
 
 def check(ref: PackageRef) -> PackageStatus:
@@ -105,9 +106,7 @@ def check(ref: PackageRef) -> PackageStatus:
         )
     want = _version_tuple(ref.minimum) or (0,)
     availability = Availability.INSTALLED if have >= want else Availability.TOO_OLD
-    return PackageStatus(
-        ref, availability, installed_version=version, provider_dist=dist_name
-    )
+    return PackageStatus(ref, availability, installed_version=version, provider_dist=dist_name)
 
 
 def resolve(refs: tuple[PackageRef, ...]) -> tuple[PackageStatus, ...]:
@@ -131,3 +130,18 @@ def ensure_dependencies(manifest: ModuleManifest) -> None:
     else:
         message += "\n  no install hint is declared for this module"
     raise DependencyError(message, hint=hint)
+
+
+def gate(manifest: ModuleManifest) -> None:
+    """The module-side entry to the gate, against the registry's stamped manifest.
+
+    A module's own `MANIFEST` is the un-stamped original. `registry.discover` copies it
+    with `dataclasses.replace` to add `origin`, `provider` and `version`, and
+    `resolved_install_hint()` needs `origin` to know that `extras=("music",)` means
+    `pip install "levix[music]"` rather than a third-party distribution nobody can name.
+    Guarding with the local copy made every official module answer "no install hint is
+    declared for this module" - technically true, useless to the person reading it.
+    """
+    from .registry import active
+
+    ensure_dependencies(active().get(manifest.name) or manifest)

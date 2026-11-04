@@ -8,6 +8,7 @@ exactly how a CLI ends up printing a traceback instead of a usage message.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import sys
 import time
@@ -35,28 +36,24 @@ def main(argv: list[str] | None = None) -> int:
     click_app = typer_main.get_command(app)
 
     exit_code = EXIT_OK
-    obj: Any = None
     ctx = None
     try:
         ctx = click_app.make_context("levix", args)
-        obj = ctx.obj
         result = click_app.invoke(ctx)
         if isinstance(result, int):
             exit_code = result
-    except BaseException as exc:  # noqa: BLE001 - classified immediately below
+    except BaseException as exc:
         handled = _classify(exc)
-        if handled is None:
-            exit_code = _report_unexpected(exc, args)
-        else:
-            exit_code = handled
+        exit_code = _report_unexpected(exc, args) if handled is None else handled
     finally:
         if ctx is not None:
-            try:
+            with contextlib.suppress(Exception):
                 ctx.close()
-            except Exception:  # noqa: BLE001 - closing must not change the exit code
-                pass
         duration_ms = (time.perf_counter() - started) * 1000.0
-        _record(obj, tuple(args), exit_code, duration_ms)
+        # The context object is read here, not before `invoke`: the root callback is what
+        # builds it, and that runs during invoke. Capturing it early handed `_record` a
+        # None every time, so the command history the dashboard shows stayed empty.
+        _record(getattr(ctx, "obj", None), tuple(args), exit_code, duration_ms)
 
     return exit_code
 
@@ -108,6 +105,25 @@ def _unknown_command(exc: BaseException) -> str | None:
     return match.group("name") if match else None
 
 
+def _plain(value: object) -> str:
+    """Dynamic text destined for the console, printed as written.
+
+    An error message quotes what the user typed - a URL, a path, a module name. Rich
+    reads the `[...]` inside those as style tags and deletes them, and a cp1252 console
+    raises UnicodeEncodeError on a name it cannot encode, so the report would no longer
+    match the thing that failed. Both are closed here.
+
+    Line by line, because `encode_safe` is a one-line function on purpose: a message we
+    authored with a line break in it (`module 'x' needs psutil\n install it with: ...`)
+    would otherwise reach the screen as literal `\x0a` text.
+    """
+    from rich.markup import escape
+
+    from .terminal import encode_safe
+
+    return "\n".join(escape(encode_safe(line)) for line in str(value).splitlines())
+
+
 def _show_alternatives(name: str) -> None:
     from rich.console import Console
 
@@ -115,26 +131,29 @@ def _show_alternatives(name: str) -> None:
 
     try:
         names = sorted(m.name for m in registry_module.active().manifests())
-    except Exception:  # noqa: BLE001 - a hint must never replace the real error
+    except Exception:
         return
     console = Console(stderr=True, highlight=False)
-    console.print(f"[bold red]unknown command:[/bold red] {name}")
-    console.print("available: " + ", ".join(f"[cyan]{n}[/cyan]" for n in names))
+    console.print(f"[bold red]unknown command:[/bold red] {_plain(name)}")
+    console.print("available: " + ", ".join(f"[cyan]{_plain(n)}[/cyan]" for n in names))
     console.print("[dim]`levix -h` lists every command and option.[/dim]")
 
 
 def _show_click(exc: BaseException) -> None:
     try:
         exc.show()  # type: ignore[attr-defined]
-    except Exception:  # noqa: BLE001
+    except Exception:
         sys.stderr.write(f"{type(exc).__name__}: {exc}\n")
 
 
 def _report_unexpected(exc: BaseException, args: list[str]) -> int:
-    from rich.console import Console
     import traceback
 
-    try:
+    from rich.console import Console
+
+    # Logging is a courtesy here. If the logger itself raises, the user still has to get
+    # the report on stderr, which is the only reason this function exists.
+    with contextlib.suppress(Exception):
         get_logger().error(
             "command %s failed: %s: %s",
             " ".join(args),
@@ -142,16 +161,16 @@ def _report_unexpected(exc: BaseException, args: list[str]) -> int:
             exc,
             exc_info=True,
         )
-    except Exception:  # noqa: BLE001
-        pass
 
     console = Console(stderr=True, highlight=False)
-    console.print(f"[bold red]unexpected error:[/bold red] {type(exc).__name__}: {exc}")
+    console.print(
+        f"[bold red]unexpected error:[/bold red] {_plain(type(exc).__name__)}: {_plain(exc)}"
+    )
     console.print(
         "[dim]This is a LEVIX bug. `levix doctor` reports the environment; the traceback "
         "tail is below.[/dim]"
     )
-    console.print("".join(traceback.format_exception(exc))[-1500:], style="dim red", end="")
+    console.print(_plain("".join(traceback.format_exception(exc))[-1500:]), style="dim red", end="")
     return EXIT_RUNTIME
 
 
@@ -159,9 +178,9 @@ def _render_error(exc: LevixError) -> None:
     from rich.console import Console
 
     console = Console(stderr=True, highlight=False)
-    console.print(f"[bold red]error:[/bold red] {exc.message}")
+    console.print(f"[bold red]error:[/bold red] {_plain(exc.message)}")
     if exc.hint and exc.hint not in exc.message:
-        console.print(f"[dim]hint:[/dim] {exc.hint}")
+        console.print(f"[dim]hint:[/dim] {_plain(exc.hint)}")
 
 
 def _record(obj: Any, argv: tuple[str, ...], exit_code: int, duration_ms: float) -> None:
@@ -173,8 +192,6 @@ def _record(obj: Any, argv: tuple[str, ...], exit_code: int, duration_ms: float)
         obj.database.apply_migrations(("core",))
         obj.database.log_command(argv, argv[0], exit_code, duration_ms)
         obj.database.prune_history(limit)
-    except Exception:  # noqa: BLE001 - deliberate: history is non-critical
-        try:
+    except Exception:
+        with contextlib.suppress(Exception):
             obj.logger.debug("command history not recorded", exc_info=True)
-        except Exception:  # noqa: BLE001
-            pass

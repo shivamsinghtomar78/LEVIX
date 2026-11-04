@@ -23,7 +23,7 @@ from .errors import ConfigError
 from .paths import Paths
 
 KIND = Literal["str", "int", "float", "bool"]
-_SECRET_MARKERS = ("key", "token", "secret", "password")
+_SECRET_MARKERS = frozenset({"key", "token", "secret", "password", "credential"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +34,7 @@ class Spec:
     choices: tuple[str, ...] | None = None
 
     def coerce(self, raw: Any, where: str) -> Any:
+        value: Any
         if self.kind == "bool":
             if isinstance(raw, bool):
                 value = raw
@@ -49,18 +50,18 @@ class Spec:
                 raise ConfigError(msg)
             try:
                 value = int(str(raw).strip())
-            except ValueError:
+            except ValueError as exc:
                 msg = f"{where} must be an integer, got {raw!r}"
-                raise ConfigError(msg)
+                raise ConfigError(msg) from exc
         elif self.kind == "float":
             if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
                 msg = f"{where} must be a number, got {raw!r}"
                 raise ConfigError(msg)
             try:
                 value = float(str(raw).strip())
-            except ValueError:
+            except ValueError as exc:
                 msg = f"{where} must be a number, got {raw!r}"
-                raise ConfigError(msg)
+                raise ConfigError(msg) from exc
         else:
             if not isinstance(raw, str):
                 msg = f"{where} must be a string, got {raw!r}"
@@ -82,11 +83,12 @@ class Spec:
 SCHEMA: dict[str, dict[str, Spec]] = {
     "general": {
         "theme": Spec("str", choices=("default", "hacker", "minimal", "high-contrast")),
-        "confirm_destructive": Spec("bool"),
+        # No `confirm_destructive` key on purpose: `approve.require_approval` gates every
+        # destructive action unconditionally, and a setting that could switch that off
+        # would make the guarantee optional - the same reason `--yes` is ignored there.
         "history_limit": Spec("int", minimum=0, maximum=10000),
     },
     "dashboard": {
-        "show_system_info": Spec("bool"),
         "recent_commands": Spec("int", minimum=0, maximum=200),
     },
     "monitor": {
@@ -108,7 +110,8 @@ SCHEMA: dict[str, dict[str, Spec]] = {
     "arcade": {"speed": Spec("float", minimum=0.25, maximum=4.0)},
     "ai": {
         "provider": Spec(
-            "str", choices=("openai-compatible", "ollama"),
+            "str",
+            choices=("openai-compatible", "ollama"),
         ),
         "model": Spec("str"),
         "base_url": Spec("str"),
@@ -127,8 +130,19 @@ DEFAULTS_FILE = Path(__file__).parent / "data" / "defaults.toml"
 
 
 def is_secret_key(dotted: str) -> bool:
-    tail = dotted.rsplit(".", 1)[-1].lower()
-    return any(marker in tail for marker in _SECRET_MARKERS)
+    """Whether a configuration key names a credential rather than a setting.
+
+    A key the schema declares as a number or a flag is never a credential, whatever it is
+    called: `ai.max_tokens` is a count of tokens, and substring matching alone refused to
+    write it while `LEVIX_AI_MAX_TOKENS` and a hand-edited `config.toml` were both
+    accepted - the one command meant to set it was the only route that said no.
+    """
+    section, _, tail = dotted.rpartition(".")
+    spec = SCHEMA.get(section, {}).get(tail)
+    if spec is not None and spec.kind in {"int", "float", "bool"}:
+        return False
+    lowered = tail.lower()
+    return any(marker in lowered for marker in _SECRET_MARKERS)
 
 
 def _read_toml(path: Path) -> dict[str, Any]:
@@ -185,9 +199,9 @@ class Config:
         merged: dict[str, dict[str, Any]] = {}
         sources: dict[str, str] = {}
 
-        for section, keys in SCHEMA.items():
+        for section, specs in SCHEMA.items():
             merged[section] = {}
-            for key, spec in keys.items():
+            for key, spec in specs.items():
                 raw = defaults.get(section, {}).get(key)
                 if raw is None:
                     msg = f"packaged defaults are missing {section}.{key}"
@@ -197,14 +211,14 @@ class Config:
 
         if paths.config_file.exists():
             user = _read_toml(paths.config_file)
-            for section, keys in user.items():
+            for section, table in user.items():
                 if section not in SCHEMA:
                     msg = f"unknown configuration section [{section}] in {paths.config_file}"
                     raise ConfigError(msg)
-                if not isinstance(keys, dict):
+                if not isinstance(table, dict):
                     msg = f"[{section}] must be a table in {paths.config_file}"
                     raise ConfigError(msg)
-                for key, raw in keys.items():
+                for key, raw in table.items():
                     if key not in SCHEMA[section]:
                         msg = f"unknown configuration key {section}.{key} in {paths.config_file}"
                         raise ConfigError(msg)
@@ -212,8 +226,8 @@ class Config:
                     merged[section][key] = SCHEMA[section][key].coerce(raw, where)
                     sources[f"{section}.{key}"] = "user"
 
-        for section, keys in _env_overrides().items():
-            for key, raw in keys.items():
+        for section, overrides in _env_overrides().items():
+            for key, raw in overrides.items():
                 where = f"{section}.{key} (environment)"
                 merged[section][key] = SCHEMA[section][key].coerce(raw, where)
                 sources[f"{section}.{key}"] = "env"
@@ -241,7 +255,9 @@ class Config:
 
     def resolved(self) -> list[ResolvedValue]:
         return [
-            ResolvedValue(f"{section}.{key}", value, self._sources.get(f"{section}.{key}", "default"))
+            ResolvedValue(
+                f"{section}.{key}", value, self._sources.get(f"{section}.{key}", "default")
+            )
             for section, keys in self._values.items()
             for key, value in keys.items()
         ]

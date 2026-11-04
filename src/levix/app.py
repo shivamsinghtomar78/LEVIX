@@ -84,16 +84,14 @@ def build_app(*, registry: ModuleRegistry | None = None) -> typer.Typer:
         if ctx.invoked_subcommand is None:
             dashboard_command(ctx)
 
-    app.command("dashboard", help="Open the interactive terminal dashboard.")(
-        dashboard_command
-    )
+    app.command("dashboard", help="Open the interactive terminal dashboard.")(dashboard_command)
     app.command("doctor", help="Report dependencies, capabilities and configuration health.")(
         doctor_command
     )
     app.command("update", help="Check whether a newer LEVIX is available.")(update_command)
-    app.command(
-        "create-module", help="Scaffold a new module/plugin you can develop and install."
-    )(create_module)
+    app.command("create-module", help="Scaffold a new module/plugin you can develop and install.")(
+        create_module
+    )
     app.add_typer(config_app, name="config", help="Read and write LEVIX configuration.")
     app.add_typer(plugins_app, name="plugins", help="Inspect installed modules and plugins.")
 

@@ -16,6 +16,7 @@ from rich.console import Console
 
 from ..approve import require_approval
 from ..errors import ConfigError
+from ..terminal import markup_safe
 
 console = Console()
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,29}$")
@@ -61,17 +62,17 @@ def create_module(
         path.write_text(content, encoding="utf-8", newline="\n")
 
     console.print(
-        f"[green]created[/green] {target_root}\n"
-        f"  package [bold]{package}[/bold] exporting MANIFEST and build_app()\n\n"
+        f"[green]created[/green] {markup_safe(target_root)}\n"
+        f"  package [bold]{markup_safe(package)}[/bold] exporting MANIFEST and build_app()\n\n"
         "Next steps:\n"
-        f"  1. cd {target_root}\n"
+        f"  1. cd {markup_safe(target_root)}\n"
         "  2. python -m venv .venv && activate it\n"
         "  3. pip install -e .   (registers the levix.plugins entry point)\n"
-        f"  4. levix plugins list  -> you should see [bold]{name}[/bold]\n"
-        f"  5. levix {name}\n"
+        f"  4. levix plugins list  -> you should see [bold]{markup_safe(name)}[/bold]\n"
+        f"  5. levix {markup_safe(name)}\n"
         "  6. pytest\n"
         "[dim]Third-party plugins run with LEVIX's full privileges. See "
-        "docs/plugins/PLUGIN_SECURITY.md.[/dim]"
+        "docs/security/PERMISSIONS.md and docs/architecture/PLUGIN_ARCHITECTURE.md.[/dim]"
     )
 
 

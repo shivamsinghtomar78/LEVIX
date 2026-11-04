@@ -26,7 +26,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from ...approve import require_approval
-from ...deps import ensure_dependencies
+from ...deps import gate
 from ...errors import EXIT_INTERRUPTED
 from . import MANIFEST, core
 
@@ -43,7 +43,7 @@ MAX_LINE_CHARS = 220
 def _gate(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         return
-    ensure_dependencies(MANIFEST)
+    gate(MANIFEST)
 
 
 def show(value: object) -> str:
@@ -172,7 +172,7 @@ def search(
     depth = max_depth if max_depth > 0 else None
     extensions = tuple(ext or ())
 
-    hits: Iterator[core.ContentHit] | Iterator[core.NameHit]
+    hits: Iterator[core.Hit]
     if grep:
         hits = core.search_contents(
             wall,
@@ -182,7 +182,10 @@ def search(
             include_hidden=include_hidden,
             extensions=extensions,
             max_depth=depth,
-            max_bytes=max_bytes if max_bytes > 0 else core.DEFAULT_GREP_MAX_BYTES,
+            # `0 = no cap` is what the option's own help promises, and `search_contents`
+            # honours it (`if max_bytes and …`). A negative value is a typo, not a request
+            # to read the disk unbounded, so it falls back to the packaged default.
+            max_bytes=max_bytes if max_bytes >= 0 else core.DEFAULT_GREP_MAX_BYTES,
             limit=limit_value,
             stats=stats,
         )
@@ -223,7 +226,7 @@ def search(
         raise typer.Exit(code=EXIT_INTERRUPTED)
 
 
-def _render_hit(hit: core.ContentHit | core.NameHit, *, wall: Path) -> str:
+def _render_hit(hit: core.Hit, *, wall: Path) -> str:
     if isinstance(hit, core.ContentHit):
         return (
             f"[cyan]{show(hit.path.relative_to(wall))}[/cyan]:[yellow]{hit.line_number}[/yellow]: "
@@ -489,7 +492,7 @@ def delete(
     removed, reclaimed, failures = core.execute_delete(plan)
     for item in removed[:LIST_ITEMS]:
         marker = "/" if item.is_dir else ""
-        console.print(f"[red]removed[/red] {relpath(item.path, plan.wall)}{marker}")
+        console.print(f"[red]removed[/red] {show(relpath(item.path, plan.wall))}{marker}")
     if len(removed) > LIST_ITEMS:
         console.print(f"[dim]... and {len(removed) - LIST_ITEMS} more[/dim]")
     console.print(
@@ -517,7 +520,7 @@ def delete(
 
 def _plan_table(plan: core.DeletePlan) -> Table:
     table = Table(
-        title=f"about to delete {plan.describe()}",
+        title=f"about to delete {show(plan.describe())}",
         header_style="bold cyan",
         title_style="bold red",
     )
@@ -528,7 +531,7 @@ def _plan_table(plan: core.DeletePlan) -> Table:
         table.add_row(
             "dir" if item.is_dir else "file",
             core.human_bytes(item.size_bytes),
-            relpath(item.path, plan.wall),
+            show(relpath(item.path, plan.wall)),
         )
     if len(plan.items) > LIST_ITEMS:
         table.add_row("...", "-", f"[dim]and {len(plan.items) - LIST_ITEMS} more[/dim]")

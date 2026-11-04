@@ -162,9 +162,7 @@ def test_seven_pieces_with_four_states_each_and_a_known_t_rotation():
     for key, states in tetris_rules.SHAPES.items():
         assert len(states) == 4, key
         assert all(cells for cells in states), key
-        assert all(
-            0 <= row < 4 and 0 <= col < 4 for cells in states for row, col in cells
-        ), key
+        assert all(0 <= row < 4 and 0 <= col < 4 for cells in states for row, col in cells), key
     assert tetris_rules.SHAPES["T"][0] == ((0, 1), (1, 0), (1, 1), (1, 2))
     assert tetris_rules.SHAPES["T"][1] == ((0, 1), (1, 1), (1, 2), (2, 1))
     assert len(set(tetris_rules.SHAPES["O"])) == 1, "O is symmetric: its states match"
@@ -238,9 +236,7 @@ def test_line_clears_score_the_classic_table_on_a_constructed_board():
 
     one_row = filled_board((bottom,))
     single = tetris_rules.lock(
-        tetris_rules.Tetris(
-            board=one_row, key="O", rotation=0, x=0, y=bottom - 1, next_key="T"
-        ),
+        tetris_rules.Tetris(board=one_row, key="O", rotation=0, x=0, y=bottom - 1, next_key="T"),
         rng,
     )
     assert single.last_clear == 1 and single.score == 100
@@ -393,8 +389,7 @@ def test_the_schema_is_idempotent_and_creates_only_our_table(database):
     assert store.ensure_schema(database) == [], "a second call applies nothing"
     with database.connect() as conn:
         names = {
-            row["name"]
-            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
     assert store.TABLE in names
     assert "levix_command_log" not in names, "the arcade namespace must not build core's table"
@@ -446,8 +441,10 @@ def test_importing_the_manifest_pulls_in_nothing_heavy(tmp_path):
 
 @pytest.mark.parametrize(
     ("argv", "statement"),
-    [(["game", "-h"], "code = main(['game','-h'])"),
-     (["game", "scores"], "code = main(['game','scores'])")],
+    [
+        (["game", "-h"], "code = main(['game','-h'])"),
+        (["game", "scores"], "code = main(['game','scores'])"),
+    ],
     ids=["help", "scores"],
 )
 def test_the_screen_is_not_imported_by_help_or_scores(tmp_path, argv, statement):
@@ -500,9 +497,7 @@ def test_tetris_auto_play_writes_a_real_row(run_cli, capsys):
     assert "tetris" in listing and "no scores yet" not in listing
 
 
-def test_an_auto_game_is_reproducible_and_an_unpinned_one_still_records_its_seed(
-    run_cli, capsys
-):
+def test_an_auto_game_is_reproducible_and_an_unpinned_one_still_records_its_seed(run_cli, capsys):
     def signature() -> str:
         text = both(capsys.readouterr())
         return next(line for line in text.splitlines() if line.startswith("score "))
