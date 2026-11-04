@@ -1,0 +1,3 @@
+# PEP 561 marker: the declared "Typing :: Typed" classifier is only true if this file
+# ships, because `mypy` and `pyright` refuse inline types from a package without it.
+# It is what makes `from levix.sdk import ModuleManifest` type-check for a plugin author.

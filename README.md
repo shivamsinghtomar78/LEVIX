@@ -6,9 +6,29 @@ LEVIX is a modular terminal platform: a single `levix` command that launches a s
 terminal applications, wrapped in an interactive dashboard, and extensible by
 third-party plugins that use the same interface the official modules use.
 
-MIT licensed · Python 3.12+ · Windows, Linux and macOS.
+MIT licensed · Python 3.12+ · Windows, Linux and macOS (run and tested on Windows 11 so far).
 
 ## Install
+
+**From this repository — works today** (Python 3.12+ required):
+
+```bash
+python -m pip install "levix[all] @ git+https://github.com/shivamsinghtomar78/LEVIX.git"
+
+# or isolated, one command per tool:
+pipx install "levix @ git+https://github.com/shivamsinghtomar78/LEVIX.git"
+pipx inject levix psutil          # add one module's capability at a time
+```
+
+Verified on 2026-11-05: this installs `levix 0.4.0` with the six direct dependencies and
+their transitive ones - no psutil, yt-dlp, soundfile, httpx or keyring - `levix --version`
+answers, `levix plugins list` marks the modules whose extras are absent (`needs yt-dlp`,
+`needs psutil`, …), and `levix monitor cpu` refuses with exit 3 and names the extra to
+install.
+
+**From PyPI — after the first release.** `levix` is an unclaimed name on the index today
+(`https://pypi.org/pypi/levix/json` returns 404), so these two lines describe the target, not
+the present. `.github/workflows/release.yml` is what makes them true:
 
 ```bash
 pipx install levix                 # recommended: isolated environment, one command
@@ -18,8 +38,7 @@ python -m pip install levix        # or into any environment you choose
 Optional capabilities are separate extras, so the core stays light:
 
 ```bash
-pipx install "levix[all]"          # every module dependency
-pipx inject levix psutil           # or add one at a time
+pipx inject levix psutil           # or install "levix[all]" for every module
 ```
 
 | Extra | Enables |
@@ -85,10 +104,13 @@ plugin SDK, security model, and the phase roadmap.
 
 ## Status
 
-Version 0.4.0 delivers the core engine, the dashboard and all seven official modules.
-The plugin *install* workflow, CI matrices and standalone binaries are scheduled in
-[docs/roadmap/CURRENT_STATUS.md](docs/roadmap/CURRENT_STATUS.md) — they are not
-implemented yet, and this README does not pretend otherwise.
+Version 0.4.0 delivers the core engine, the dashboard and all seven official modules. What
+is *not* done is stated rather than implied: every number in these pages comes from one
+Windows 11 machine, the CI matrix that would prove Linux and macOS is written but has never
+run, and so is the release workflow that would put `levix` on PyPI. Plugin *install* and
+standalone binaries remain open. [docs/roadmap/CURRENT_STATUS.md](docs/roadmap/CURRENT_STATUS.md)
+lists what is proven, how it was proven, and the twelve things no reader should quote as
+verified.
 
 ## License
 

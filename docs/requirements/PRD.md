@@ -155,7 +155,7 @@ tested today.
 | S1 | One executable covers seven applications | `levix --help` lists dashboard, doctor, update, create-module, config, plugins and all seven modules | met |
 | S2 | Installing the core pulls no heavy dependency | core dependency list is 6 packages; `pyproject.toml` extras hold the rest | met |
 | S3 | Startup help stays free of module imports | child-interpreter `sys.modules` assertions in `tests/test_router.py`, `tests/modules/*` | met |
-| S4 | Full automated suite passes | `python -m pytest -q` → `693 passed, 5 skipped in 138.23s`, exit 0 | met on Windows |
+| S4 | Full automated suite passes | `python -m pytest -q` → `693 passed, 5 skipped in 157.55s`, exit 0 | met on Windows only |
 | S5 | Exit codes are documented and stable | `errors.py` table plus the exit-code-named tests in `tests/modules/` | met |
 | S6 | Third party can ship a module with metadata only | `levix create-module` scaffold, `commands/create_module_cmd.py` | scaffold generated and covered by tests; end-to-end install of a generated package is not covered by a test in this repo |
 | S7 | No credential ever reaches a log or config file | `logging_setup.RedactFilter`, `config.is_secret_key` masking, `secrets.py` chain | met in code; only Windows keyring path exercised |
@@ -169,8 +169,8 @@ tested today.
 | `levix plugins install` / `uninstall` / `publish` | read-only `list` and `info`; installation is `pip install -e .` | `commands/plugins_cmd.py` docstring: "Installation and removal are deliberately NOT implemented here… the consent flow plus the pipx/frozen-environment questions need to be settled" |
 | A consent/security model for third-party code | disclosure only: `permissions` in manifests, warned about in `plugins info` | `commands/plugins_cmd.py` |
 | Self-updating | `levix update` prints the PyPI version and the commands to run; never installs | `commands/update_cmd.py` ("LEVIX does not modify its own installation") |
-| CI / CD pipelines | no workflow files in the tree; checks are documented as commands | `ACCEPTANCE_CRITERIA.md`, no `.github/workflows` present |
-| PyPI upload | `levix update` reads `https://pypi.org/pypi/levix/json`, which presumes a public `levix` name; nothing in the repo publishes | `commands/update_cmd.py` |
+| CI / CD pipelines | `.github/workflows/ci.yml` (3 OSes x Python 3.12/3.13 + a no-extras wheel job) and `release.yml` (tag → build → GitHub Release → PyPI) are written; **no run has ever executed them** | `.github/workflows/ci.yml`, `ACCEPTANCE_CRITERIA.md` §Criteria that cannot be accepted on this machine yet |
+| PyPI upload | `levix update` reads `https://pypi.org/pypi/levix/json`, which presumes a public `levix` name; the name is unclaimed (404) and `release.yml` would publish it once the project and its trusted publisher exist | `commands/update_cmd.py`, `docs/technology/PYTHON_PACKAGING.md` §Publishing |
 | Standalone binaries | `spawn.is_frozen()` support exists so a frozen build would re-exec itself, but no build is produced | `src/levix/spawn.py`, `CHANGELOG.md` "no standalone binaries yet" |
 | In-dashboard full-screen modules | every module uses `UiSpec(mode="suspend")`; `registry.build_screen` and `UiSpec.screen_path` are not used by the dashboard | `src/levix/module.py`, `dashboard/app.py` |
 | Enforced plugin sandboxing | none; documented as impossible for in-process Python plugins | `plugins_cmd.py` |

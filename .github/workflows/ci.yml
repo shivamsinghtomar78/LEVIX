@@ -1,0 +1,148 @@
+# The three-platform gate. Everything merged or pushed to main gets checked on the two
+# platforms no local run has ever covered - the documentation is honest about that being
+# the weakest claim in the project, and this workflow is how it stops being one.
+#
+# Nothing here uploads anything. Publication lives in release.yml and happens on a tag.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One red platform must not hide the state of the other two.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # `.[all,dev]` is what the recorded numbers were measured against: the suite drives
+      # fakes over real importable packages, so psutil / yt-dlp / soundfile / httpx /
+      # keyring have to be present even though no test contacts a network.
+      - name: Install the package with every extra, plus the dev tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[all,dev]"
+
+      - name: Lint
+        run: python -m ruff check src tests plugin-examples
+
+      - name: Format
+        run: python -m ruff format --check src tests plugin-examples
+
+      # Bare `mypy`: [tool.mypy].files already lists src/levix AND the example plugin, so
+      # the copy-pasteable plugin gets type-checked with the core instead of drifting.
+      - name: Types
+        run: python -m mypy
+
+      # The eight `integration` cases open an audio stream or shell out to the OS's own
+      # network tools. They stay a deliberate, local `pytest -m integration` decision.
+      - name: Test suite
+        run: python -m pytest -m "not integration"
+
+  # The promise that makes the rest of the design worth having: an install with no extras
+  # stays small, and a module that needs one refuses with exit 3 instead of an ImportError
+  # traceback. That cannot be proven from an editable checkout, so this job builds the real
+  # wheel and installs it into a throwaway venv.
+  core-stays-light:
+    name: Bare core install (no extras)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build the distribution
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Install the wheel with nothing extra into a throwaway venv
+        run: |
+          python -m venv .venv-core
+          .venv-core/bin/python -m pip install --upgrade pip
+          .venv-core/bin/python -m pip install dist/*.whl
+
+      - name: The wheel carries the files the core reads at run time
+        run: |
+          python - <<'PY'
+          import pathlib
+          import zipfile
+
+          wheel = next(pathlib.Path("dist").glob("*.whl"))
+          names = zipfile.ZipFile(wheel).namelist()
+          for required in ("levix/py.typed", "levix/data/defaults.toml"):
+              assert required in names, f"{required} is missing from {wheel.name}"
+          # defaults.toml was once force-included twice, which aborted the wheel build.
+          assert names.count("levix/data/defaults.toml") == 1, "defaults.toml is duplicated"
+          PY
+
+      - name: No heavy package was pulled in by the core install
+        run: |
+          installed="$(.venv-core/bin/python -m pip freeze | tr '[:upper:]' '[:lower:]')"
+          for forbidden in psutil yt-dlp yt_dlp soundfile sounddevice numpy httpx keyring; do
+            if printf '%s\n' "$installed" | grep -qi "^${forbidden}=="; then
+              echo "::error::the bare core installed ${forbidden}; it belongs in an extra"
+              exit 1
+            fi
+          done
+
+      - name: Heavy modules refuse with exit 3 and name their extra
+        run: |
+          fail=0
+          for command in "monitor overview" "music devices" "tube info example.invalid" "ai check"; do
+            if .venv-core/bin/levix ${command} >/dev/null 2>&1; then
+              code=0
+            else
+              code=$?
+            fi
+            if [ "${code}" -ne 3 ]; then
+              echo "::error::\`levix ${command}\` exited ${code}; expected 3 (missing extra)"
+              fail=1
+            else
+              echo "ok: \`levix ${command}\` refused with exit 3"
+            fi
+          done
+          exit "${fail}"
+
+      - name: The stdlib-only modules and the platform commands still work
+        run: |
+          .venv-core/bin/levix --version
+          .venv-core/bin/levix hacker info
+          .venv-core/bin/levix files search src/levix --ext py --limit 3
+          .venv-core/bin/levix game scores
+          # doctor exits 3 here because its own report calls the uninstalled extras MISSING
+          # (doctor.py `exit_code_for`). A 0 on a bare install would mean the diagnostic had
+          # stopped telling the truth, so both codes are accepted and the JSON is parsed.
+          code=0
+          .venv-core/bin/levix doctor --json > doctor.json || code=$?
+          if [ "${code}" -gt 3 ]; then
+            echo "::error::\`levix doctor --json\` exited ${code}; expected 0 or 3"
+            exit 1
+          fi
+          echo "doctor exited ${code} and its verdict is:"
+          .venv-core/bin/python -c 'import json; print(json.load(open("doctor.json"))["verdict"])'
+          # The point of the plugins list on a bare install is that it names what is missing.
+          .venv-core/bin/levix plugins list | grep -c "needs"

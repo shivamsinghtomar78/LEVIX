@@ -64,12 +64,14 @@ because `addopts` deselects no marker.
 
 | Check | Command | Result on this machine |
 | --- | --- | --- |
-| Lint | `.venv/Scripts/python.exe -m ruff check src tests` | exit 0, "All checks passed!" |
-| Format | `.venv/Scripts/python.exe -m ruff format --check src tests` | exit 0, "77 files already formatted" |
-| Types | `.venv/Scripts/python.exe -m mypy src/levix` | exit 0, "no issues found in 59 source files" |
+| Lint | `.venv/Scripts/python.exe -m ruff check src tests plugin-examples` | exit 0, "All checks passed!" |
+| Format | `.venv/Scripts/python.exe -m ruff format --check src tests plugin-examples` | exit 0, "80 files already formatted" |
+| Types | `.venv/Scripts/python.exe -m mypy` | exit 0, "no issues found in 61 source files" (`[tool.mypy].files` covers `src/levix` **and** `plugin-examples/hello/src`, so the copy-pasteable plugin is checked with the core) |
 | Install | `.venv/Scripts/python.exe -m pip install -e ".[dev,all]"` | the only install proven here |
-| Distribution | `python -m build` then install the wheel into an empty venv | sdist + wheel build; in the clean venv all seven modules answer `-h` with 0, the four heavy ones refuse with 3 naming the right extra, and no heavy package is imported (`CHANGELOG.md` §Verification) |
+| Distribution | `python -m build` then install the wheel into an empty venv | sdist + wheel build (66 wheel entries, `levix/py.typed` present, `levix/data/defaults.toml` exactly once); in the clean venv all seven modules answer `-h` with 0, the four heavy ones refuse with 3 naming the right extra, and no heavy package is imported (`CHANGELOG.md` §Verification) |
+| CI | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | **written, not yet executed.** The matrix and the tag-triggered publish exist as files; every command in both was replayed by hand on this laptop (the six checks above, plus the whole `core-stays-light` job under `bash -eo pipefail`), but no Actions run exists, so the Linux and macOS numbers on this page are still Windows numbers |
 | Doctor | `levix doctor --json` | verdict `degraded`, exit 0; capabilities `ffmpeg`, `media_player`, `audio_output`, `psutil`, `battery`, `keyring`, `platform` are `ok`; `temperature` `degraded` (this psutil has no `sensors_temperatures`), `gpu` `unsupported`, `terminal` `degraded` (stdout not a TTY) |
+| Update check | `levix update` | exit 8, `could not check for updates: PyPI returned 404` - the name is unclaimed, and the command refuses to imply "up to date" when it could not ask |
 
 Eleven `# noqa` comments remain, each for a rule that fires on correct code: `S105` on the
 three `SECRET_*` names that are lookup keys rather than credentials, `S311` on the seeded
@@ -123,8 +125,12 @@ the source. Each row below is a case where the code was wrong, not the doc.
    plugin means `pip install` in this environment. Deliberate, documented, and still a gap.
 9. **`UiSpec(mode="screen")`.** `registry.build_screen` exists and is tested for its failure
    branch; no manifest in the tree declares a screen, all seven use `suspend`.
-10. **CI.** There is no `.github/workflows` or any pipeline in this tree. Every number above
-    is a hand run on one laptop.
+10. **A pipeline run.** `.github/workflows/ci.yml` and `.github/workflows/release.yml` are in
+    the tree, and **nothing has executed them yet**. The matrix that would prove Linux and
+    macOS is a promise until the first green Actions run, and the publish job cannot pass
+    until the PyPI project and its trusted publisher exist
+    (`docs/technology/PYTHON_PACKAGING.md` §Publishing). Every number on this page is still a
+    hand run on one laptop.
 11. **Coverage.** `[tool.coverage.run]` sets `branch = true`, but no `--cov` is in
     `addopts` and no threshold is enforced.
 12. **Pre-commit hooks.** `.pre-commit-config.yaml` exists and names `ruff --fix`,
@@ -132,31 +138,38 @@ the source. Each row below is a case where the code was wrong, not the doc.
 
 ## What to do next, in order
 
-1. Run the suite on Linux and macOS. The POSIX items in the list above are the ones to
-   watch: secrets hardening, the keyring backend, and Hacker's four parsers.
+1. Push `main` and read the first CI matrix. Assume Linux and macOS disagree with something:
+   the POSIX items in the list above are where to look - secrets hardening, the keyring
+   backend, Hacker's four parsers - and the moment a column is green, this page's platform
+   warning can be narrowed to the parts that still have no runner.
 2. Write the redaction test that gap 6 is asking for. It is the only security promise in the
    docs that no test holds, and it does not need a terminal or a network.
 3. Add tests for `levix update` (against a stubbed PyPI) and `levix create-module` (generate
    into a temp dir, then import the scaffolded `MANIFEST`).
 4. Decide the fate of `mode="screen"`: either give one module a real embedded screen or drop
    the mode. Documented-but-unused API is a tax on every reader.
-5. Add a CI workflow with the three matrices and the `integration` marker excluded, so the
-   suite count stops being a hand-reported number.
-6. Then, and only then, the packaging milestones: publish to PyPI under a real name, build
-   the standalone binaries, and ship `levix plugins install` / `publish`.
+5. Do the one-time PyPI side that a checkout cannot do: the account with 2FA, the project
+   `levix`, the trusted publisher naming this repo + `release.yml` + the `pypi` environment,
+   and that environment in GitHub Settings. Then `git tag v0.4.0 && git push origin v0.4.0`,
+   which is the first time README's `pipx install levix` is true and the first time
+   `levix update` has a real answer to give.
+6. Only after a release exists: the standalone binaries (starting with the frozen-metadata
+   question in `PYTHON_PACKAGING.md`), a winget manifest, and `levix plugins install` /
+   `publish`.
 
 ## How to reproduce the numbers in this page
 
 ```bash
 .venv/Scripts/python.exe -m pytest -q                           # the suite, all 698 cases
+.venv/Scripts/python.exe -m pytest -m "not integration"          # the 690 CI runs
 .venv/Scripts/python.exe -m pytest -m integration -q             # just the 8 device/OS cases
-.venv/Scripts/python.exe -m ruff check src tests                 # lint
-.venv/Scripts/python.exe -m ruff format --check src tests        # format
-.venv/Scripts/python.exe -m mypy src/levix                       # types
+.venv/Scripts/python.exe -m ruff check src tests plugin-examples        # lint
+.venv/Scripts/python.exe -m ruff format --check src tests plugin-examples  # format
+.venv/Scripts/python.exe -m mypy                                 # types (core + example plugin)
 COLUMNS=100 .venv/Scripts/levix.exe doctor --json                # what this machine can actually do
 ```
 
-`pytest -m integration -q` overrides the marker selection only; the repository's
-`addopts = "-q --strict-markers"` deselects nothing, so an unmodified `pytest` run is the
-full 698 cases on this machine. A CI matrix that must not touch a device or an OS tool
-should say `-m "not integration"` explicitly rather than assume the config does it.
+Those six lines are `.github/workflows/ci.yml`'s `suite` job, run by hand on one platform.
+The repository's `addopts = "-q --strict-markers"` deselects no marker, so an unmodified
+`pytest` is the full 698 cases here; a job that must not touch a device or an OS tool has to
+say `-m "not integration"` explicitly rather than assume the config does it.

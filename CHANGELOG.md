@@ -32,6 +32,26 @@ against the code.
   process list or a crash report; `LEVIX_DISABLE_FILE_SECRETS=1` refuses the plaintext tier.
 - `Permission.SECRET_WRITE`, so a module that can replace a credential discloses something
   different from one that can only read it. Disclosure, as always, not enforcement.
+- `.github/workflows/ci.yml`: the matrix the documentation kept promising - `ubuntu-latest`,
+  `macos-latest` and `windows-latest` × Python 3.12 and 3.13, each running
+  `ruff check`, `ruff format --check`, `mypy` and `pytest -m "not integration"` after
+  installing `.[all,dev]` - plus a `core-stays-light` job that builds the wheel, installs it
+  into an empty venv with **no** extras, and asserts that no heavy package was pulled, that
+  `monitor overview` / `music devices` / `tube info` / `ai check` each refuse with exit 3,
+  that the stdlib-only surface still answers (`--version`, `hacker info`, `files search`,
+  `game scores`, and `plugins list` marking what is missing) with `doctor --json` accepted at
+  exit 0 **or** 3 - a bare install *should* report its missing extras - and that the archive
+  carries `levix/py.typed` and exactly one `levix/data/defaults.toml`.
+- `.github/workflows/release.yml`, triggered only by a `v*` tag: the tag must equal
+  `[project].version`, the checks run again, `python -m build` plus `twine check` produce the
+  artefacts, a GitHub Release attaches them with `SHA256SUMS.txt`, and `pypa/gh-action-pypi-publish`
+  uploads to PyPI through **trusted publishing** (an OIDC token scoped to this repo, this
+  workflow file and the `pypi` environment - no API token lives in the repository or on a
+  laptop). The PyPI project and its trusted publisher still have to be created by a human;
+  see `docs/technology/PYTHON_PACKAGING.md` §Publishing.
+- `src/levix/py.typed`: `pyproject.toml` has claimed the `Typing :: Typed` classifier since
+  0.4.0, but PEP 561 means an editor only gets inline types from `levix.sdk` if the marker
+  ships, so plugin authors were being promised typing the distribution did not provide.
 
 ### Changed
 
@@ -44,6 +64,15 @@ against the code.
 - `levix ai`'s refusal when no key is found puts the sentence in the error and the remedy in
   the hint (`LEVIX_AI_API_KEY`, `levix ai key set`, the keyring service and user name), so
   the two parts stay separately readable instead of one run-on line.
+- `README.md` no longer opens with a command that cannot work. The install section puts the
+  verified source install first (`pip install "levix[all] @ git+https://…"`), states that the
+  PyPI name is unclaimed today, and keeps `pipx install levix` under a heading that says it
+  describes the release the workflows produce. The tagline and the Status section now carry
+  the same boundary: Windows 11 is where the numbers came from.
+- `CONTRIBUTING.md`'s check commands are CI's commands: `ruff check src tests
+  plugin-examples`, `ruff format --check src tests plugin-examples` and a bare `mypy`, whose
+  configured `files` already cover the example plugin. `mypy src/levix` checked 59 of the 61
+  files the project actually types.
 - Where the documentation was wrong rather than the code, the text was cut back to the size
   of the evidence: three pages still described the masked secret as `[set, hidden]` after the
   brackets had come out of `_MASK`; the file-store-disabled refusal was quoted as exiting 7
@@ -104,8 +133,10 @@ against the code.
 
 ### Verification
 
-- `ruff check src tests` and `ruff format --check src tests` exit 0 (77 files already
-  formatted); `mypy src/levix` exits 0 with no issues in 59 source files.
+- `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests
+  plugin-examples` exit 0 (80 files already formatted); bare `python -m mypy` exits 0 with no
+  issues in 61 source files - `src/levix` plus the example plugin, which is what
+  `[tool.mypy].files` declares and what CI now runs.
 - The suite, on this machine: `.venv/Scripts/python.exe -m pytest -o addopts="" -q` runs
   **580 test functions in 17 files, collecting 698 parametrised cases** and reports
   **693 passed, 5 skipped, 2 warnings in 157.55 s**, exit 0. The five skips are the symlink
@@ -126,6 +157,29 @@ against the code.
   with exit 3 and name the right extra, `levix plugins list` marks them `needs psutil` /
   `needs yt-dlp` / `needs soundfile, sounddevice`, and no heavy package was pulled. That is
   the core/extras split proven from an installed distribution rather than an editable one.
+- The wheel's contents were measured, not assumed: 66 entries, `levix/py.typed` present,
+  `levix/data/defaults.toml` present exactly once, 26 files under `levix/modules/` and
+  `levix-0.4.0.dist-info/entry_points.txt` there for `importlib.metadata` to read - which is
+  the same three assertions `ci.yml` now makes about every build.
+- Every shell command in `ci.yml`'s `core-stays-light` job was replayed by hand against
+  `dist/levix-0.4.0-py3-none-any.whl` installed into an empty venv, under
+  `bash -eo pipefail` like the runner's default shell: no heavy package in `pip freeze`,
+  the four module commands each exiting 3, `--version` / `hacker info` / `files search` /
+  `game scores` each exiting 0, `doctor --json` exiting 3 with verdict `missing` and 21
+  findings, and four `needs` rows in `plugins list`. That is the proof the job will print;
+  the job itself has still not run.
+- Installing from the repository was proven in a throwaway venv against the pushed `main`:
+  `python -m pip install "levix @ git+https://github.com/shivamsinghtomar78/LEVIX.git"`
+  installs `levix 0.4.0` with the six direct dependencies and their transitive ones and
+  **no** psutil / yt-dlp / soundfile / sounddevice / numpy / httpx / keyring,
+  `levix --version` answers, `levix plugins list` marks `needs yt-dlp` /
+  `needs soundfile, sounddevice`, and `levix monitor cpu` exits 3.
+- `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
+  exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
+  is up to date when it could not ask.
+- The two workflow files **have not executed**. Everything above is a hand run that CI will
+  repeat on three platforms; the first Actions result is the moment the Linux and macOS
+  claims in these pages stop being unproven.
 - None of the above was run on Linux or macOS. Both are designed for and neither is proven.
 
 ## 0.4.0 - initial official modules

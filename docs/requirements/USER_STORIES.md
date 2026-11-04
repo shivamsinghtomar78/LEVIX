@@ -8,7 +8,8 @@ Personas are the three in `PRD.md` §3: **DEV** (developer on their own machine)
 
 Deferred across several stories, and where that is recorded instead of invented: plugin
 `install`/`uninstall`/`publish` (`commands/plugins_cmd.py:1-8`, `PRD.md` §7), PyPI distribution,
-standalone binaries and CI matrices (`CHANGELOG.md` "Known gaps"), POSIX behaviour
+standalone binaries (`CHANGELOG.md` "Known gaps") and a CI matrix that has never run - the
+two workflow files exist, their first result does not. POSIX behaviour is likewise deferred
 (`CHANGELOG.md`). The open-work list is `docs/roadmap/CURRENT_STATUS.md`, which every
 deferred story points at rather than restating.
 
@@ -334,7 +335,9 @@ that `pip install -e .` in someone else's environment is enough to make `levix <
   anything LEVIX can"), or expect `ensure_dependencies` in `levix.sdk` — a plugin declaring
   `requirements` must call the gate from its own Typer callback or a missing package surfaces as
   `ImportError` instead of exit 3.
-- Not implemented: `levix plugins install`, `uninstall`, `publish`; PyPI distribution; CI.
+- Not implemented: `levix plugins install`, `uninstall`, `publish`; PyPI distribution (the
+  release workflow would publish it, but no PyPI project exists to publish to); a pipeline
+  result (the workflows are written and unrun).
 - Verified by: `tests/test_plugin_example.py` (7, incl.
   `test_the_entry_point_is_discovered_as_a_third_party_module`, `test_a_third_party_command_runs_through_the_router`,
   `test_a_plugin_sees_the_paths_and_history_of_the_run_it_is_in`,
@@ -357,7 +360,7 @@ wrapping `levix` is safe.
   [SECTION]` prints `key=value` lines, and colour follows `NO_COLOR` / `LEVIX_NO_COLOR=1` /
   `TERM=dumb` / a non-TTY stdout (`terminal.detect`). History is best-effort: any failure inside
   `main._record` is swallowed and cannot change your code.
-- Not implemented: no CI exists in this tree — no `.github/workflows`, no pipeline results to
-  point at; the checks are the commands in `CONTRIBUTING.md:36-43` and the 600-pass figure in
-  `PRD.md` S4 was produced by hand on Windows 11. `levix update` also presumes a published `levix`
+- Not implemented: no pipeline has **run** — `.github/workflows/ci.yml` and `release.yml` are
+  in the tree and unexecuted; the checks are the commands in `CONTRIBUTING.md:42-50` and the
+  693-pass figure in `PRD.md` S4 was produced by hand on Windows 11. `levix update` also presumes a published `levix`
   name on PyPI, which does not exist yet.

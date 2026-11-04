@@ -99,5 +99,7 @@ into this directory, so `levix plugins info <name>` prints a path that exists.
 | `CHANGELOG.md` | Release history, with an `Unreleased` section that carries the current work. |
 | `SECURITY.md` | Vulnerability reporting. |
 | `LICENSE` | MIT. |
+| `.github/workflows/ci.yml` | The matrix that runs the lint, type and `-m "not integration"` suite on Linux, macOS and Windows, plus a wheel installed with no extras. Written on 2026-11-05; no run has executed it yet. |
+| `.github/workflows/release.yml` | Tag-triggered build, GitHub release and PyPI upload through trusted publishing. Also never run, and it cannot until the PyPI project exists. |
 | `plugin-examples/hello/` | A real, installable example plugin: its own `pyproject.toml`, one manifest, one command. |
 | `src/levix/` | The code. Docstring comments explain *why*; this directory explains *what*. |
