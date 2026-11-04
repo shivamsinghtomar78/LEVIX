@@ -1,0 +1,117 @@
+"""Terminal capability handling: colour, glyph and Windows VT bootstrap.
+
+Textual configures the console itself. The non-Textual paths (`levix hacker matrix`,
+plain progress bars, fallback output when `NO_COLOR` is set) do not, so they call
+`ensure_ansi()` before emitting raw escape sequences.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+from dataclasses import dataclass
+from functools import lru_cache
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalProfile:
+    is_tty: bool
+    supports_colour: bool
+    supports_unicode: bool
+    columns: int
+    rows: int
+    term: str
+    protocol_enabled: bool
+
+
+def _windows_vt_enabled() -> bool:
+    """Ask the console for ENABLE_VIRTUAL_TERMINAL_PROCESSING (0x0004).
+
+    Legacy conhost renders ANSI as garbage without this. Returns whether it worked,
+    and never raises: a failure simply means we degrade to plain text.
+    """
+    if not sys.platform.startswith("win"):
+        return True
+    try:
+        import ctypes
+
+        handle = ctypes.windll.kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if not ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        return bool(ctypes.windll.kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+    except Exception:
+        return False
+
+
+def detect(*, force_no_unicode: bool | None = None) -> TerminalProfile:
+    tty = bool(sys.stdout.isatty())
+    no_color = bool(os.environ.get("NO_COLOR"))
+    term = os.environ.get("TERM", "")
+    force_no_color = os.environ.get("LEVIX_NO_COLOR") == "1"
+    colour = tty and not no_color and not force_no_color and term != "dumb"
+
+    if force_no_unicode is None:
+        encoding = getattr(sys.stdout, "encoding", "") or ""
+        force_no_unicode = "utf" not in encoding.lower()
+    unicode_ok = not force_no_unicode and term != "dumb"
+
+    size = shutil.get_terminal_size(fallback=(80, 24))
+    return TerminalProfile(
+        is_tty=tty,
+        supports_colour=colour,
+        supports_unicode=unicode_ok,
+        columns=size.columns,
+        rows=size.lines,
+        term=term,
+        protocol_enabled=_windows_vt_enabled() if (tty and colour) else False,
+    )
+
+
+def glyphs(profile: TerminalProfile) -> dict[str, str]:
+    """ASCII-safe alternatives for terminals that cannot render box drawing."""
+    if profile.supports_unicode:
+        return {
+            "block": "█",
+            "shade": "▓",
+            "dot": "·",
+            "arrow": "→",
+            "tick": "✓",
+            "cross": "✗",
+            "dash": "─",
+            "spinner": "⠋⠙⠸⠴⠦⠇",
+        }
+    return {
+        "block": "#",
+        "shade": "+",
+        "dot": ".",
+        "arrow": "->",
+        "tick": "OK",
+        "cross": "!!",
+        "dash": "-",
+        "spinner": r"\|/-",
+    }
+
+
+@lru_cache(maxsize=1)
+def active_glyphs() -> dict[str, str]:
+    """Glyph set for the current stream.
+
+    On a Windows console whose Python encoding is cp1252, writing U+2588 raises
+    UnicodeEncodeError inside Rich's win32 writer - a crash, not cosmetic damage.
+    Every renderer therefore asks this instead of embedding box-drawing characters.
+    """
+    return glyphs(detect())
+
+
+def bar(percent: float, width: int = 20, *, low: str = "green", mid: str = "yellow",
+        high: str = "red") -> str:
+    """A Rich-markup usage bar that is safe on any codepage."""
+    set_ = active_glyphs()
+    filled = max(0, min(width, int(round(percent / 100 * width))))
+    colour = low if percent < 60 else (mid if percent < 85 else high)
+    return (
+        f"[{colour}]{set_['block'] * filled}{set_['dash'] * (width - filled)}[/{colour}] "
+        f"{percent:5.1f}%"
+    )

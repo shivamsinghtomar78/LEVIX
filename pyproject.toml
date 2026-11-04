@@ -1,0 +1,126 @@
+[build-system]
+requires = ["hatchling>=1.33,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "levix"
+version = "0.4.0"
+description = "One CLI. Multiple applications. Unlimited extensibility."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "LEVIX" }]
+keywords = ["cli", "terminal", "tui", "textual", "plugins", "dashboard"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Terminals",
+  "Typing :: Typed",
+]
+
+# Core stays lightweight. Nothing below is a module-specific dependency.
+dependencies = [
+  "click>=8.5,<9",
+  "platformdirs>=4.14,<5",
+  "rich>=15.0,<16",
+  "textual>=8.2,<9",
+  "tomlkit>=0.15,<1",
+  "typer>=0.27,<0.28",
+]
+
+[project.optional-dependencies]
+monitor = ["psutil>=7.2,<8"]
+tube = ["yt-dlp>=2026.10.26"]
+music = ["sounddevice>=0.5,<1", "soundfile>=0.14,<1"]
+ai = ["httpx>=0.28,<1"]
+secrets = ["keyring>=25.7,<26"]
+all = [
+  "levix[ai,monitor,music,secrets,tube]",
+]
+dev = [
+  "build>=1.6",
+  "mypy>=2.4",
+  "pre-commit>=4.7",
+  "pytest>=9.2",
+  "pytest-cov>=7.1",
+  "ruff>=0.17",
+]
+
+[project.scripts]
+levix = "levix.main:main"
+
+[project.entry-points."levix.plugins"]
+monitor = "levix.modules.systempulse:MANIFEST"
+hacker = "levix.modules.hacker:MANIFEST"
+files = "levix.modules.files:MANIFEST"
+tube = "levix.modules.tube:MANIFEST"
+game = "levix.modules.arcade:MANIFEST"
+music = "levix.modules.music:MANIFEST"
+ai = "levix.modules.ai:MANIFEST"
+
+[project.urls]
+Homepage = "https://github.com/shivamsinghtomar78/LEVIX"
+Documentation = "https://github.com/shivamsinghtomar78/LEVIX/tree/main/docs"
+Source = "https://github.com/shivamsinghtomar78/LEVIX"
+Issues = "https://github.com/shivamsinghtomar78/LEVIX/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/levix"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/levix/data" = "levix/data"
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "docs", "plugin-examples", "README.md", "LICENSE", "CHANGELOG.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+  "integration: exercises real workflows without mocking the boundary",
+  "slow: takes more than a second",
+]
+
+[tool.coverage.run]
+source = ["src/levix"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF", "T20", "S"]
+ignore = ["S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "T20"]
+# Typer inspects the signature defaults to build the parser, so `typer.Option(...)` in a
+# parameter default is the framework's documented idiom. B008 forbids precisely that.
+"src/levix/commands/*.py" = ["B008"]
+"src/levix/modules/**/cli.py" = ["B008"]
+# Every value in these queries is bound with a `?` placeholder; the only thing
+# interpolated is a module-level table-name constant, which S608 cannot distinguish from
+# user input. Reviewed by hand rather than silenced project-wide.
+"src/levix/modules/music/core.py" = ["S608"]
+"src/levix/modules/arcade/scores.py" = ["S608"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/levix"]
+mypy_path = "src"
+strict = false
+warn_unused_ignores = true
+disallow_untyped_defs = true

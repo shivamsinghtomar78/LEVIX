@@ -1,0 +1,40 @@
+[general]
+theme = "default"
+confirm_destructive = true
+history_limit = 50
+
+[dashboard]
+show_system_info = true
+recent_commands = 10
+
+[monitor]
+interval_seconds = 1.0
+process_limit = 15
+
+[hacker]
+matrix_fps = 30
+matrix_density = 0.02
+
+[tube]
+output_dir = ""
+default_format = "best"
+
+[music]
+library_dir = ""
+volume = 0.8
+
+[arcade]
+speed = 1.0
+
+[ai]
+provider = "openai-compatible"
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+ollama_url = "http://127.0.0.1:11434"
+temperature = 0.2
+max_tokens = 1024
+require_approval = true
+
+[logging]
+level = "info"
+file_enabled = true
