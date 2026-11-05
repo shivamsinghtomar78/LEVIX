@@ -260,8 +260,11 @@ def is_hidden(path: Path, name: str) -> bool:
     if not HIDDEN_ATTR:
         return False
     try:
-        return bool(os.lstat(path).st_file_attributes & HIDDEN_ATTR)
-    except (OSError, AttributeError):
+        # `getattr` for the same reason line 239 uses it for `st_birthtime`: the attribute
+        # only exists on Windows, and a Linux mypy run - which CI now does - has no stub for
+        # it. The `HIDDEN_ATTR` guard above already means this line is dead code on POSIX.
+        return bool(getattr(os.lstat(path), "st_file_attributes", 0) & HIDDEN_ATTR)
+    except OSError:
         return False
 
 

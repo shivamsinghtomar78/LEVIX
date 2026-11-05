@@ -130,6 +130,14 @@ against the code.
   shape `levix create-module` scaffolds while the scaffold emits a `MANIFEST` object and a
   `build_app()` function, and was implemented by nothing. The loader reads only `cli_path`, so
   the class was public API that did nothing; `levix.sdk` now re-exports 14 names.
+- `files.core.is_hidden` read `os.lstat(path).st_file_attributes`, an attribute that only
+  exists on Windows, so `mypy` on the Linux and macOS runners failed the new `Types` step
+  with `"stat_result" has no attribute "st_file_attributes"` while the same command was green
+  on this laptop. The behaviour was already correct - `HIDDEN_ATTR` is `0` off Windows, so the
+  line never runs there - and it now reads through
+  `getattr(os.lstat(path), "st_file_attributes", 0)`, the pattern `core.py:239` already uses
+  for `st_birthtime`. `python -m mypy --platform win32|linux|darwin` is clean, which is how
+  one machine checks what four runners reported.
 
 ### Verification
 
@@ -166,8 +174,8 @@ against the code.
   `bash -eo pipefail` like the runner's default shell: no heavy package in `pip freeze`,
   the four module commands each exiting 3, `--version` / `hacker info` / `files search` /
   `game scores` each exiting 0, `doctor --json` exiting 3 with verdict `missing` and 21
-  findings, and four `needs` rows in `plugins list`. That is the proof the job will print;
-  the job itself has still not run.
+  findings, and four `needs` rows in `plugins list`. The job then ran that exact list on an
+  Ubuntu runner and passed.
 - Installing from the repository was proven in a throwaway venv against the pushed `main`:
   `python -m pip install "levix @ git+https://github.com/shivamsinghtomar78/LEVIX.git"`
   installs `levix 0.4.0` with the six direct dependencies and their transitive ones and
@@ -177,10 +185,17 @@ against the code.
 - `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
   exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
   is up to date when it could not ask.
-- The two workflow files **have not executed**. Everything above is a hand run that CI will
-  repeat on three platforms; the first Actions result is the moment the Linux and macOS
-  claims in these pages stop being unproven.
-- None of the above was run on Linux or macOS. Both are designed for and neither is proven.
+- **CI run #1 executed on 2026-11-05** (commit `fcbcb22`, the push that added the files).
+  `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the no-extras
+  install, the four exit-3 refusals and the wheel-content assertions are now proven on a
+  second platform. All four POSIX matrix columns stopped at `Types` on the one Windows-only
+  stat attribute, so there is still no POSIX **suite** result; both Windows columns passed
+  Lint, Format and Types and failed inside the suite, which is the first time this tree has
+  been red on a Windows machine that is not this laptop. Run logs need a signed-in account,
+  so the suite step now also writes the failing test names as annotations - run #2 is where
+  the POSIX suite results and those names arrive.
+- Linux and macOS remain unproven for the suite and for every module command: run #1 got as
+  far as `Types` there. Windows is proven on this laptop and red on the runner.
 
 ## 0.4.0 - initial official modules
 

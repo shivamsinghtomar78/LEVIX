@@ -6,7 +6,7 @@ LEVIX is a modular terminal platform: a single `levix` command that launches a s
 terminal applications, wrapped in an interactive dashboard, and extensible by
 third-party plugins that use the same interface the official modules use.
 
-MIT licensed · Python 3.12+ · Windows, Linux and macOS (run and tested on Windows 11 so far).
+MIT licensed · Python 3.12+ · Windows, Linux and macOS (the suite has run on Windows 11 so far).
 
 ## Install
 
@@ -106,9 +106,10 @@ plugin SDK, security model, and the phase roadmap.
 
 Version 0.4.0 delivers the core engine, the dashboard and all seven official modules. What
 is *not* done is stated rather than implied: every number in these pages comes from one
-Windows 11 machine, the CI matrix that would prove Linux and macOS is written but has never
-run, and so is the release workflow that would put `levix` on PyPI. Plugin *install* and
-standalone binaries remain open. [docs/roadmap/CURRENT_STATUS.md](docs/roadmap/CURRENT_STATUS.md)
+Windows 11 machine, the CI matrix that would prove Linux and macOS has run once and no
+column of it is green yet, and the release workflow that would put `levix` on PyPI has
+never run at all. Plugin *install* and standalone binaries remain open.
+[docs/roadmap/CURRENT_STATUS.md](docs/roadmap/CURRENT_STATUS.md)
 lists what is proven, how it was proven, and the twelve things no reader should quote as
 verified.
 

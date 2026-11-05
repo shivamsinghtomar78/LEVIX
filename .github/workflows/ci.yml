@@ -56,8 +56,20 @@ jobs:
 
       # The eight `integration` cases open an audio stream or shell out to the OS's own
       # network tools. They stay a deliberate, local `pytest -m integration` decision.
+      #
+      # A failing column also has to say WHICH tests failed where anyone can see it: the
+      # raw log needs a signed-in account, the annotations do not, so the summary lines are
+      # re-emitted as `::error::` before the step's own exit code.
       - name: Test suite
-        run: python -m pytest -m "not integration"
+        run: |
+          code=0
+          python -m pytest -m "not integration" -rf --tb=short | tee pytest.log || code=$?
+          if [ "${code}" -ne 0 ]; then
+            grep -E "^(FAILED|ERROR)" pytest.log | head -n 20 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit "${code}"
+          fi
 
   # The promise that makes the rest of the design worth having: an install with no extras
   # stays small, and a module that needs one refuses with exit 3 instead of an ImportError

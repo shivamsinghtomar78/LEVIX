@@ -66,10 +66,10 @@ because `addopts` deselects no marker.
 | --- | --- | --- |
 | Lint | `.venv/Scripts/python.exe -m ruff check src tests plugin-examples` | exit 0, "All checks passed!" |
 | Format | `.venv/Scripts/python.exe -m ruff format --check src tests plugin-examples` | exit 0, "80 files already formatted" |
-| Types | `.venv/Scripts/python.exe -m mypy` | exit 0, "no issues found in 61 source files" (`[tool.mypy].files` covers `src/levix` **and** `plugin-examples/hello/src`, so the copy-pasteable plugin is checked with the core) |
+| Types | `.venv/Scripts/python.exe -m mypy` | exit 0, "no issues found in 61 source files" (`[tool.mypy].files` covers `src/levix` **and** `plugin-examples/hello/src`, so the copy-pasteable plugin is checked with the core). Since run #1, `--platform win32`, `--platform linux` and `--platform darwin` are all run here too, because a Linux runner is what found the one Windows-only attribute the tree had |
 | Install | `.venv/Scripts/python.exe -m pip install -e ".[dev,all]"` | the only install proven here |
 | Distribution | `python -m build` then install the wheel into an empty venv | sdist + wheel build (66 wheel entries, `levix/py.typed` present, `levix/data/defaults.toml` exactly once); in the clean venv all seven modules answer `-h` with 0, the four heavy ones refuse with 3 naming the right extra, and no heavy package is imported (`CHANGELOG.md` §Verification) |
-| CI | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | **written, not yet executed.** The matrix and the tag-triggered publish exist as files; every command in both was replayed by hand on this laptop (the six checks above, plus the whole `core-stays-light` job under `bash -eo pipefail`), but no Actions run exists, so the Linux and macOS numbers on this page are still Windows numbers |
+| CI | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | **has run once** (run #1, commit `fcbcb22`, 2026-11-05): `Bare core install (no extras)` **passed on Ubuntu**, which is the first time the extras gate was proven on a platform other than this laptop. All four Linux/macOS matrix jobs stopped at `Types` on one real cross-platform defect (`st_file_attributes` is Windows-only; `mypy` on a POSIX runner has no stub for it - fixed, and now proven against `--platform win32`, `linux` and `darwin`). Both Windows jobs passed Lint, Format and Types and failed at `Test suite`; the cause is not yet known, and the next run annotates the failing test names so they are readable without a signed-in account |
 | Doctor | `levix doctor --json` | verdict `degraded`, exit 0; capabilities `ffmpeg`, `media_player`, `audio_output`, `psutil`, `battery`, `keyring`, `platform` are `ok`; `temperature` `degraded` (this psutil has no `sensors_temperatures`), `gpu` `unsupported`, `terminal` `degraded` (stdout not a TTY) |
 | Update check | `levix update` | exit 8, `could not check for updates: PyPI returned 404` - the name is unclaimed, and the command refuses to imply "up to date" when it could not ask |
 
@@ -125,12 +125,11 @@ the source. Each row below is a case where the code was wrong, not the doc.
    plugin means `pip install` in this environment. Deliberate, documented, and still a gap.
 9. **`UiSpec(mode="screen")`.** `registry.build_screen` exists and is tested for its failure
    branch; no manifest in the tree declares a screen, all seven use `suspend`.
-10. **A pipeline run.** `.github/workflows/ci.yml` and `.github/workflows/release.yml` are in
-    the tree, and **nothing has executed them yet**. The matrix that would prove Linux and
-    macOS is a promise until the first green Actions run, and the publish job cannot pass
-    until the PyPI project and its trusted publisher exist
-    (`docs/technology/PYTHON_PACKAGING.md` §Publishing). Every number on this page is still a
-    hand run on one laptop.
+10. **A green matrix.** `.github/workflows/ci.yml` has now run (run #1): the bare-wheel job
+    passed on Ubuntu, four POSIX jobs failed on a Windows-only stat attribute that is fixed,
+    and the two Windows jobs failed inside the suite for a reason the log does not yet name.
+    `release.yml` has **not** run, and it cannot pass until the PyPI project and its trusted
+    publisher exist (`docs/technology/PYTHON_PACKAGING.md` §Publishing).
 11. **Coverage.** `[tool.coverage.run]` sets `branch = true`, but no `--cov` is in
     `addopts` and no threshold is enforced.
 12. **Pre-commit hooks.** `.pre-commit-config.yaml` exists and names `ruff --fix`,
@@ -138,10 +137,13 @@ the source. Each row below is a case where the code was wrong, not the doc.
 
 ## What to do next, in order
 
-1. Push `main` and read the first CI matrix. Assume Linux and macOS disagree with something:
-   the POSIX items in the list above are where to look - secrets hardening, the keyring
-   backend, Hacker's four parsers - and the moment a column is green, this page's platform
-   warning can be narrowed to the parts that still have no runner.
+1. Read run #2. The POSIX columns now get past `Types`, so the first real Linux and macOS
+   suite results arrive there, and the Windows columns fail with the failing test names in
+   their annotations rather than only in a log that needs a signed-in account. Assume Linux
+   and macOS disagree with something: the POSIX items in the list above are where to look -
+   secrets hardening, the keyring backend, Hacker's four parsers - and the moment a column
+   is green, this page's platform warning can be narrowed to the parts that still have no
+   runner.
 2. Write the redaction test that gap 6 is asking for. It is the only security promise in the
    docs that no test holds, and it does not need a terminal or a network.
 3. Add tests for `levix update` (against a stubbed PyPI) and `levix create-module` (generate

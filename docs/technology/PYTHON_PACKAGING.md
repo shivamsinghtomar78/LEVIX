@@ -139,7 +139,7 @@ that the archive contains `levix/py.typed` and exactly one `levix/data/defaults.
 what a bare install should report, so a 0 would mean the diagnostic had gone quiet.
 Every command in that job was run by hand on 2026-11-05 against `dist/*.whl` installed into
 an empty venv on this Windows box - the whole list, under `bash -eo pipefail` like the
-runner's default shell, green - but the job itself has not executed on any platform.
+runner's default shell, green - and the job then ran on a real Ubuntu runner and passed.
 
 **`.github/workflows/release.yml`** runs **only on a `v*` tag**, in three jobs:
 
@@ -179,9 +179,11 @@ Confirmed absent from this tree as of writing:
   state the workflows above reach, not today's. `levix update` therefore answers
   `could not check for updates: PyPI returned 404` and exits 8 - verified on this machine on
   2026-11-05 - because it refuses to imply you are up to date when it could not ask.
-- **A green matrix**: the two workflow files are in the tree and **have not run yet**. Until
-  Actions reports on them, the only numbers in this project are hand runs on one Windows 11
-  laptop, which is what `docs/roadmap/CURRENT_STATUS.md` says at the top of the page.
+- **A green matrix**: run #1 happened on 2026-11-05, on the commit that added the files. The
+  wheel job passed on Ubuntu in 31 s; the four POSIX columns died at `mypy` on a Windows-only
+  stat attribute, and both Windows columns died inside the suite. So the numbers quoted in
+  these pages are still hand runs on one Windows 11 laptop until a column goes green, which
+  is what `docs/roadmap/CURRENT_STATUS.md` says at the top of the page.
 - **Standalone binaries**: PyInstaller is not installed and not referenced in
   `pyproject.toml`; only `spawn.py::is_frozen()` anticipates a frozen build. A frozen build
   has one thing to prove before it is usable: discovery reads
