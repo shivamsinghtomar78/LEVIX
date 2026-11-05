@@ -21,10 +21,9 @@ from typing import TYPE_CHECKING, Any
 from .module import ModuleManifest, Origin
 
 if TYPE_CHECKING:
-    # Typing only: the registry must not import a module CLI, a screen or Textual to
-    # answer a question about manifests.
+    # Typing only: the registry must not import a module CLI or Textual to answer a
+    # question about manifests.
     import typer
-    from textual.screen import Screen
 
 GROUP = "levix.plugins"
 OFFICIAL_DISTRIBUTION = "levix"
@@ -95,12 +94,6 @@ class ModuleRegistry:
         """The single deferred-import site for module CLIs."""
         factory = _resolve(manifest.cli_path)
         return factory()
-
-    def build_screen(self, manifest: ModuleManifest) -> type[Screen]:
-        if manifest.ui is None or manifest.ui.screen_path is None:
-            msg = f"module {manifest.name!r} declares no dashboard screen"
-            raise LookupError(msg)
-        return _resolve(manifest.ui.screen_path)
 
 
 OFFICIAL_NAMES = frozenset({"monitor", "hacker", "files", "tube", "game", "music", "ai"})

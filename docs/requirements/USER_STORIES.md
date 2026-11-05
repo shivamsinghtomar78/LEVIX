@@ -46,7 +46,7 @@ own real help, so that looking up a flag never imports yt-dlp or psutil.
 - Satisfied today: each module is a forwarding command with `add_help_option=False` and
   `ignore_unknown_options` (`router.py:49-57`), so `-h` reaches the module's Typer parser;
   discovery loads only the `MANIFEST` data object and `registry.build_cli` is "the single
-  deferred-import site" (`registry.py:94-97`). A bare module name prints that module's help and
+  deferred-import site" (`registry.py:93-96`). A bare module name prints that module's help and
   exits 2, because click 8.5 raises `NoArgsIsHelpError`.
 - Verified by: `tests/test_router.py::test_help_forwarding_does_not_import_a_heavy_dependency` and
   `::test_an_official_module_help_does_not_import_its_own_dependency` — both run the real entry
@@ -80,24 +80,33 @@ As a developer I want a launcher that lists what is ready, narrows as I type, la
 this terminal and shows what I ran recently, so that I do not memorise command names.
 
 - Satisfied today: bare `levix` or `levix dashboard` (`app.py:84-87`, `commands/dashboard_cmd.py`).
-  Rows come from manifests only with three distinct states — `ready`, `needs install` (with the
-  pip line), `broken` (with the load failure) (`dashboard/module_list.py:49-78`). Typing filters
+  Rows come from manifests only, and exactly one declaration changes membership rather than
+  wording: `UiSpec(mode="hidden")` gets no row (`dashboard/module_list.py:94-106`). The rows
+  that do appear carry three distinct states — `ready`, `needs install` (with the
+  pip line), `broken` (with the load failure) (`dashboard/module_list.py:42-86`). Typing filters
   name/title/summary case-insensitively. Bindings: `enter` launch, `space` details, `f` filter,
   `r` reload with a fresh registry, `t` theme cycle, `h` history toggle, `q` quit, `escape`
-  clear-or-quit, `ctrl+c` quit (`dashboard/app.py:74-84`). Launch is
+  clear-or-quit, `ctrl+c` quit (`dashboard/app.py:75-85`). Launch is
   `with self.suspend(): spawn.run(*argv)`, argv = `ui.argv` else `<name> -h`, so one Textual app
-  owns the terminal (`dashboard/app.py:165-176,254-264`); `levix tube` declares no argv, so its row opens
+  owns the terminal (`dashboard/app.py:166-177,255-264`); `levix tube` declares no argv, so its row opens
   Tube help. The history panel shows the last `dashboard.recent_commands` (default 10) rows with
   codes coloured green/yellow/red (`dashboard/history.py:13-42`). With stdout or stdin redirected
   it explains and exits 2 (`dashboard_cmd.py:23-30`).
-- Verified by: `tests/test_dashboard.py` (15, incl.
+- Verified by: `tests/test_dashboard.py` (19, incl.
   `test_rows_carry_the_state_that_the_gate_actually_reports`, `test_enter_on_a_ready_row_runs_the_same_command_line`,
   `test_enter_on_an_unavailable_row_says_why_instead_of_running_it`,
   `test_theme_binding_cycles_only_through_registered_themes`, `test_history_can_be_hidden_without_touching_the_log`,
+  `test_a_module_hidden_from_the_dashboard_gets_no_row`,
+  `test_a_hidden_module_reaches_no_widget_the_app_builds`,
+  `test_no_official_module_hides_itself_from_the_dashboard`,
   `test_dashboard_refuses_a_redirected_terminal_with_the_usage_code`).
-- Not implemented: no module runs inside the dashboard — every manifest uses `UiSpec(mode="suspend")`
-  or `hidden`, and `registry.build_screen` / `UiSpec.screen_path` are never called by it
-  (`test_registry.py::test_build_screen_refuses_a_module_that_declares_none` only pins the refusal).
+- Not implemented: no module runs inside the dashboard, and the API no longer pretends
+  otherwise. `UiSpec.mode` is `suspend` or `hidden`; `registry.build_screen` and
+  `UiSpec.screen_path` — which nothing called, and which could not have worked because one
+  TTY hosts one Textual app — are deleted, and `hidden` is now enforced where it was only
+  documented (`module_list.py:94-106`, with
+  `tests/test_registry.py::test_a_module_hidden_from_the_dashboard_is_still_discovered_and_routable`
+  keeping the router out of it).
   The theme vocabulary used to disagree — `config.SCHEMA` accepted `hacker`, `minimal` and
   `high-contrast` (`config.py:85`) while `dashboard/theme.py` knew only `default|dark|green|matrix|light`,
   so a configured `hacker` printed "unknown theme 'hacker'; using levix-dark". Both tables now

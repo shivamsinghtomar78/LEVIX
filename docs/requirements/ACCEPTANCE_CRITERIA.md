@@ -1,8 +1,8 @@
 # LEVIX Acceptance Criteria
 
 Each criterion states behaviour asserted by a named test in `tests/` or observable from a documented command. Exit codes are the table in
-`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 612 test functions in 21 files (14 in `tests/`, 7 in `tests/modules/`)
-collecting to 743 parametrised cases, 10 marked `integration`; the hand run behind every line below is `735 passed, 8 skipped`. Eight skips,
+`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 617 test functions in 21 files (14 in `tests/`, 7 in `tests/modules/`)
+collecting to 748 parametrised cases, 10 marked `integration`; the hand run behind every line below is `740 passed, 8 skipped`. Eight skips,
 each naming its reason: five symlink cases - this Windows account cannot `os.symlink`, and three of them are POSIX-only by design - and the
 three POSIX-only file-mode cases of `tests/test_secrets.py`, which CI run #6 (`3d460df`) executed on the Ubuntu and macOS columns instead of
 skipping them.
@@ -12,14 +12,16 @@ the same tree minus the 10 `integration` cases on Ubuntu, macOS and Windows; its
 was **red on all six columns, on eight test functions that depend on the machine**, all eight
 were fixed, and its fourth (`5b047ad`), fifth (`75daed2`) and sixth (`3d460df`) runs are **green on all seven
 jobs**. So the lines below
-are now cross-platform results for the 733 non-`integration` cases and Windows-only results
-for the other ten - and for anything a runner never asserts, which §What is not verified lists.
+are cross-platform results for the `-m "not integration"` set as it stood on the tree each run
+covered - 733 cases through run #6 - and Windows-only results for the five cases that landed
+after `3d460df`, for the other ten, and for anything a runner never asserts, which
+§What is not verified lists.
 `tests/conftest.py` keeps runs
 off a real profile (`LEVIX_*` cleared, `LEVIX_HOME` in a temp directory, `NO_COLOR=1`, file logging disabled at `conftest.py:38`, registry
 reset per test) and `run_cli` calls the real entry point `levix.main.main(list(argv))`, so exit codes and history rows are part of what is
-asserted. Checks: `python -m pytest -o addopts="" -q` (743 collected, `735 passed, 8 skipped, 2 warnings in 115.34 s`, no network, no real TTY - and yes, that includes the 10
-`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `725 passed, 8 skipped, 10 deselected in 101.64 s`), `python -m pytest -m integration` (those 10 alone: `10 passed, 733
-deselected, 2 warnings in 10.77 s`), `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests plugin-examples` (both exit 0,
+asserted. Checks: `python -m pytest -o addopts="" -q` (748 collected, `740 passed, 8 skipped, 2 warnings in 101.57 s`, no network, no real TTY - and yes, that includes the 10
+`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `730 passed, 8 skipped, 10 deselected in 95.72 s`), `python -m pytest -m integration` (those 10 alone: `10 passed, 738
+deselected, 2 warnings in 10.06 s`), `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests plugin-examples` (both exit 0,
 84 files already formatted), `python -m mypy` (61 files - `[tool.mypy].files` also covers the example plugin - no issues) and the same with
 `--platform win32`, `--platform linux` and `--platform darwin`, `levix doctor`. Citations: a bare `file.py:line` is under `src/levix/`; `tests/FILE.py` names a test file (module tests are
 `tests/modules/FILE.py`) and each identifier after it is one of its test functions.
@@ -37,7 +39,7 @@ covers it (`PRD.md` FR-15).
 
 **AC-03 — help imports nothing heavy, screens least of all.** Given a bare interpreter, when `levix --help`, `levix tube -h` or
 `levix game scores` runs, then none of `psutil`, `yt_dlp`, `sounddevice`, `soundfile`, `numpy`, `textual` appears in `sys.modules`, because
-discovery reads only the `MANIFEST` and `registry.py:94` is the single deferred-import site. Check: `tests/test_router.py`
+discovery reads only the `MANIFEST` and `registry.py:93` is the single deferred-import site. Check: `tests/test_router.py`
 `test_help_forwarding_does_not_import_a_heavy_dependency`, `test_an_official_module_help_does_not_import_its_own_dependency`;
 `tests/modules/test_arcade.py` `test_the_screen_is_not_imported_by_help_or_scores`.
 

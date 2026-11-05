@@ -21,9 +21,10 @@ MANIFEST = ModuleManifest(
     ),
     requirements=(),
     permissions=frozenset({Permission.FS_READ}),
-    # `hidden` keeps an example out of the dashboard. A module with a real interactive
-    # surface declares `mode="suspend"` (its own full-screen CLI) or `mode="screen"` with
-    # `screen_path="my_module.screens:MyScreen"` to be pushed inside the dashboard.
+    # `hidden` keeps an example out of the dashboard; `levix hello` still runs. A module
+    # with a real interactive surface declares `mode="suspend"` (the default) and the
+    # `argv` that opens its screen. There is no embedding mode: one TTY cannot host two
+    # Textual apps, and the dashboard is one.
     ui=UiSpec(mode="hidden"),
     documentation="plugin-examples/hello/README.md",
 )

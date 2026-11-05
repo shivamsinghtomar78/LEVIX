@@ -4,6 +4,8 @@ The rows are built from manifests only. A module that needs an extra, and a modu
 entry point failed to load, are two different facts and are labelled differently: "type
 `pip install \"levix[tube]\"`" is actionable, "failed to load: ImportError(...)" is a bug
 report. Collapsing both into "unavailable" would hide the difference from the user.
+
+One manifest field decides membership rather than wording: `UiSpec(mode="hidden")`.
 """
 
 from __future__ import annotations
@@ -90,7 +92,18 @@ def _command_note(manifest: ModuleManifest) -> str:
 
 
 def build_rows(registry: ModuleRegistry) -> list[ModuleRow]:
-    return [row_for(manifest) for manifest in registry.manifests()]
+    """Every module the dashboard offers, in name order.
+
+    `UiSpec(mode="hidden")` is the only declaration that changes this list: a module that
+    asks not to be offered still runs as `levix <name>`, it just gets no row here. The
+    filter lives with the rows rather than in the app so that the list, the filter and the
+    "nothing matches" message answer the same question.
+    """
+    return [
+        row_for(manifest)
+        for manifest in registry.manifests()
+        if manifest.ui is None or manifest.ui.mode != "hidden"
+    ]
 
 
 def filter_rows(rows: list[ModuleRow], needle: str) -> list[ModuleRow]:

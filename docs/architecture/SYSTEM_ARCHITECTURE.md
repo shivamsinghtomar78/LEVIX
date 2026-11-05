@@ -143,10 +143,16 @@ Single process per command, one-shot, no daemon, no background jobs.
 
 ## 8. Known gaps
 
-* `registry.build_screen` and `UiSpec(mode="screen", screen_path=…)` exist and are
-  tested only for their failure path (`tests/test_registry.py:166-169`), but no manifest in
-  the tree declares `screen` — all seven use `suspend`. In-app screen embedding is
-  therefore designed but unused; `docs/architecture` should not promise it.
+* ~~`registry.build_screen` and `UiSpec(mode="screen", screen_path=…)`~~ **closed by
+  deletion.** They existed, were tested only for their failure path, and no manifest in the
+  tree declared `screen` - all seven use `suspend`. The reason they could not stay is the
+  same reason the tree already gives for `suspend` (`dashboard/app.py:166-171`,
+  `module.UiSpec`): one TTY cannot host two Textual apps, and the dashboard is one, so an
+  "embedded screen" mode could only ever have been a field the core ignored. `mode` is now
+  `suspend | hidden`, and
+  `hidden` - which the docstring had claimed meant "not offered by the dashboard" while
+  `module_list.build_rows` listed everything - is now enforced there. See
+  `docs/architecture/PLUGIN_ARCHITECTURE.md` §Loading and running and its gap 3.
 * `CHANGELOG.md` described "lazy `LevixGroup` command routing". No `LevixGroup` class
   exists; laziness comes from forwarding (`router.py`, `ADR-0003`). The changelog line is
   corrected, and this is the kind of drift `docs/roadmap/CURRENT_STATUS.md` exists to catch.

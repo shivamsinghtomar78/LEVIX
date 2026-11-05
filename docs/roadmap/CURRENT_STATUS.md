@@ -40,15 +40,15 @@ on `importlib.metadata` entry points. The core is six lightweight dependencies
 run time with a message that names the extra. The dashboard is a launcher: it never calls
 module internals, it re-enters `levix <module> …` in a child process with the terminal
 suspended. Commands, modules, errors, exit codes, configuration layering and the
-dependency gate are covered by a 612-function suite that runs without network, without a
+dependency gate are covered by a 617-function suite that runs without network, without a
 real device and without a real terminal.
 
 ## What is built, and how each part is proven
 
 | Part | Exists | Proven by |
 | --- | --- | --- |
-| Core engine (registry, router, config, storage, secrets, deps gate, capabilities, errors, logging, terminal) | 21 top-level modules under `src/levix/` | 14 test files in `tests/` (156 functions, 175 collected cases), `tests/test_logging.py` (6 / 11) and `tests/test_secrets.py` (4 / 4) among them |
-| Textual dashboard (module list, detail panel, history, theme, suspend-and-run launcher) | `src/levix/dashboard/` | `tests/test_dashboard.py` (15) driven headlessly through Textual's Pilot |
+| Core engine (registry, router, config, storage, secrets, deps gate, capabilities, errors, logging, terminal) | 21 top-level modules under `src/levix/` | 14 test files in `tests/` (161 functions, 180 collected cases), `tests/test_logging.py` (6 / 11) and `tests/test_secrets.py` (4 / 4) among them |
+| Textual dashboard (module list, detail panel, history, theme, suspend-and-run launcher) | `src/levix/dashboard/` | `tests/test_dashboard.py` (19) driven headlessly through Textual's Pilot |
 | Platform commands: `doctor`, `config`, `plugins`, `history`, `create-module`, `update`, `secrets` handling | `src/levix/commands/` | `tests/test_doctor.py` (6), `tests/test_config.py` (20), `tests/test_markup_safety.py` (9), `tests/test_update.py` (10) against a stubbed `urlopen`, `tests/test_create_module.py` (9 / 13) which generates a project into a temp dir, registers it as a distribution and runs it through the real router |
 | Tube | `src/levix/modules/tube/` | 62 functions / 76 cases against a fake `yt_dlp`, no network |
 | Hacker | `…/hacker/` | 53 / 79, OS reporting driven with captured text |
@@ -57,21 +57,21 @@ real device and without a real terminal.
 | Music | `…/music/` | 57 / 74; three cases are marked `integration` and need a machine with sound hardware |
 | Arcade (`game`) | `…/arcade/` | 39 / 43, rules as pure functions plus Pilot-driven screens |
 | Files | `…/files/` | 123 / 153 in a temporary filesystem |
-| Plugin contract and a real third-party module | `levix.sdk` (14 re-exports), `plugin-examples/hello/` | `tests/test_registry.py` (12), `tests/test_plugin_example.py` (7) which registers the example through a hand-built `dist-info` and runs the real router over it |
+| Plugin contract and a real third-party module | `levix.sdk` (14 re-exports), `plugin-examples/hello/` | `tests/test_registry.py` (12), `tests/test_plugin_example.py` (8) which registers the example through a hand-built `dist-info` and runs the real router over it |
 
 ## Test suite as last run
 
 ```
 .venv/Scripts/python.exe -m pytest -o addopts="" -q
-612 test functions in 21 files, collecting to 743 parametrised cases
-735 passed, 8 skipped, 2 warnings in 115.34 s   (exit 0)
+617 test functions in 21 files, collecting to 748 parametrised cases
+740 passed, 8 skipped, 2 warnings in 101.57 s   (exit 0)
 ```
 
 The same tree, one process at a time, split the way CI splits it:
 
 ```
--m "not integration"   725 passed, 8 skipped, 10 deselected in 101.64 s   (exit 0)
--m integration         10 passed, 733 deselected, 2 warnings in 10.77 s   (exit 0)
+-m "not integration"   730 passed, 8 skipped, 10 deselected in 95.72 s   (exit 0)
+-m integration         10 passed, 738 deselected, 2 warnings in 10.06 s   (exit 0)
 ```
 
 The `-o addopts=""` clears `-q --strict-markers`; it changes nothing about which cases run,
@@ -84,7 +84,7 @@ because `addopts` deselects no marker.
   the Ubuntu and macOS columns of CI run #6, which is where that half of the claim now comes from.
   Every skip names its reason; none is a silent pass.
 - Ten cases carry `@pytest.mark.integration` (`pytest -m integration` collects exactly
-  `10/743 tests, 733 deselected`). The repository's `addopts` is `-q --strict-markers` and
+  `10/748 tests, 738 deselected`). The repository's `addopts` is `-q --strict-markers` and
   deselects nothing, so the default run above already includes them - among them the real
   audio-device playback test, which skips itself when PortAudio reports no output device.
   Three of the ten ask the operating system which sound hardware it has; CI run #3 moved
@@ -198,6 +198,8 @@ the source. Each row below is a case where the code was wrong, not the doc.
 | The scaffold's own README told the author to run `levix <name> hello`; Typer mounts a one-command app as the command, so click refused the extra argument (exit 2) while `levix <name> -h` still advertised `hello` | the README shows `levix <name>` and `levix <name> you`, and the test asserts the string `hello` is not in it | `tests/test_create_module.py::test_the_scaffold_writes_every_file_the_contract_needs`, `::test_the_generated_command_runs_through_the_real_router` |
 | The scaffold's command body interpolated `{display}`, a variable that exists only in the generator, so the first run of a fresh module raised `NameError: name 'display' is not defined` | prints `MANIFEST.title` with `markup=False`, which also stops a caller-supplied `[/bold]` from being read as a style tag | `tests/test_create_module.py::test_the_generated_command_runs_through_the_real_router` |
 | The scaffold's own `tests/test_manifest.py` asserted `build_app()._name`, an attribute Typer 0.27 does not have, so `pytest` failed inside a brand-new project | asserts `build_app().info.name` | `tests/test_create_module.py::test_the_generated_project_passes_its_own_test_suite`, which runs the generated suite in a child interpreter |
+| `UiSpec(mode="hidden")` was documented as "not offered by the dashboard" while `module_list.build_rows` returned a row for **every** discovered manifest, so the example plugin's declaration hid nothing and `levix hello` was listed like the rest | `build_rows` skips a manifest whose `ui.mode` is `hidden`, and the docstring now describes what the code does | `tests/test_plugin_example.py::test_the_hidden_example_is_discovered_but_gets_no_dashboard_row` (the real plugin, not a stub), `tests/test_dashboard.py::test_a_module_hidden_from_the_dashboard_gets_no_row`, `::test_a_hidden_module_reaches_no_widget_the_app_builds` |
+| `levix plugins info` printed `dashboard : not offered` for a manifest that declares no `UiSpec` - the opposite of the app, which lists it and runs `<name> -h` | prints the effective mode, `suspend (no UiSpec declared)` | `tests/test_dashboard.py::test_a_manifest_with_no_uispec_is_disclosed_as_offered_by_default` |
 
 ## Defects found by CI, on platforms this laptop is not
 
@@ -265,8 +267,21 @@ says exactly what closed each row.
    to answer yet.
 8. **Plugin install/publish.** `levix plugins` offers `list` and `info` only; installing a
    plugin means `pip install` in this environment. Deliberate, documented, and still a gap.
-9. **`UiSpec(mode="screen")`.** `registry.build_screen` exists and is tested for its failure
-   branch; no manifest in the tree declares a screen, all seven use `suspend`.
+9. **`UiSpec(mode="screen")` - closed by deletion, and `hidden` made real.**
+   `registry.build_screen`, `UiSpec.screen_path` and the `"screen"` literal are gone: no manifest
+   declared a screen, nothing called the resolver, and the mode could not have worked anyway,
+   because the dashboard is itself a Textual app and one TTY hosts one. The more serious half was
+   that `hidden`, documented as "not offered by the dashboard", filtered nothing:
+   `module_list.build_rows` returned a row for every discovered manifest, so the example plugin's
+   `UiSpec(mode="hidden")` hid nothing at all. `build_rows` filters now, `plugins info` no longer
+   prints `not offered` for a manifest that declares no `UiSpec` (the dashboard offers exactly
+   those, with the default mode), and
+   `tests/test_dashboard.py::test_a_module_hidden_from_the_dashboard_gets_no_row`,
+   `::test_a_hidden_module_reaches_no_widget_the_app_builds`,
+   `::test_no_official_module_hides_itself_from_the_dashboard` and
+   `tests/test_registry.py::test_a_module_hidden_from_the_dashboard_is_still_discovered_and_routable`
+   are the proof. Deleting a field from `levix.sdk` is safe only because nothing has been
+   published yet - see item 10 and `docs/technology/PYTHON_PACKAGING.md` §Publishing.
 10. **A release, and a green run of the whole suite off this laptop.** Runs #4, #5 and #6 are green
     on all six columns, so the eight machine-dependent fixes are confirmed, the redaction tests
     and the three POSIX permission cases have executed on Linux and macOS; but each column runs
@@ -292,30 +307,30 @@ says exactly what closed each row.
 
 ## What to do next, in order
 
-1. Read CI run #7 once this tree is pushed. It is the first run that executes
-   `tests/test_update.py` and `tests/test_create_module.py`, and the second of those is the first
-   case in the suite that starts another interpreter and runs `pytest` inside it. Neither file
-   touches the network or a device, so nothing about them should be machine-dependent - but that
-   is exactly the kind of claim this project has been corrected on twice, so the run is the
-   evidence and not the reasoning. Note that the annotations of a green run may again be
-   un-readable: the unauthenticated API limit is 60 calls an hour and one run's job list plus
-   annotation attempts can spend it.
-2. Decide the fate of `mode="screen"`: either give one module a real embedded screen or drop
-   the mode. Documented-but-unused API is a tax on every reader.
-3. Do the one-time PyPI side that a checkout cannot do: the account with 2FA, the project
+1. Read CI run #8 once this tree is pushed: it is the first run that executes the hidden-module
+   cases (`tests/test_dashboard.py::test_a_module_hidden_from_the_dashboard_gets_no_row`,
+   `::test_a_hidden_module_reaches_no_widget_the_app_builds`,
+   `::test_no_official_module_hides_itself_from_the_dashboard` and
+   `tests/test_registry.py::test_a_module_hidden_from_the_dashboard_is_still_discovered_and_routable`)
+   and the first that runs the suite without `registry.build_screen` in it. Read a finished run
+   rather than waiting on one: the unauthenticated API allows 60 calls an hour, and the loop that
+   polled run #7 every 20 seconds spent the whole budget and died on `403 rate limit exceeded`
+   before the run was legible. Two calls - the run, then its job list - answer everything the
+   step-conclusion evidence in §Defects found by CI is based on.
+2. Do the one-time PyPI side that a checkout cannot do: the account with 2FA, the project
    `levix`, the trusted publisher naming this repo + `release.yml` + the `pypi` environment,
    and that environment in GitHub Settings. Then `git tag v0.4.0 && git push origin v0.4.0`,
    which is the first time README's `pipx install levix` is true and the first time
    `levix update` has a real answer to give.
-4. Only after a release exists: the standalone binaries (starting with the frozen-metadata
+3. Only after a release exists: the standalone binaries (starting with the frozen-metadata
    question in `PYTHON_PACKAGING.md`), a winget manifest, and `levix plugins install` /
    `publish`.
 
 ## How to reproduce the numbers in this page
 
 ```bash
-.venv/Scripts/python.exe -m pytest -o addopts="" -q              # the suite, all 743 cases
-.venv/Scripts/python.exe -m pytest -o addopts="" -q -m "not integration"   # the 733 CI runs
+.venv/Scripts/python.exe -m pytest -o addopts="" -q              # the suite, all 748 cases
+.venv/Scripts/python.exe -m pytest -o addopts="" -q -m "not integration"   # the 738 CI runs
 .venv/Scripts/python.exe -m pytest -o addopts="" -q -m integration         # just the 10 device/OS cases
 .venv/Scripts/python.exe -m ruff check src tests plugin-examples        # lint
 .venv/Scripts/python.exe -m ruff format --check src tests plugin-examples  # format
@@ -327,7 +342,7 @@ Four of those lines are `.github/workflows/ci.yml`'s `suite` job - `Lint`, `Form
 `Test suite` - and the `Test suite` step is the `-m "not integration"` line; the bare run and the
 `-m integration` line are how this machine covers the ten cases the matrix deselects.
 The repository's `addopts = "-q --strict-markers"` deselects no marker, so an unmodified
-`pytest` is the full 743 cases here; a job that must not touch a device or an OS tool has to
+`pytest` is the full 748 cases here; a job that must not touch a device or an OS tool has to
 say `-m "not integration"` explicitly rather than assume the config does it. `-o addopts=""`
 is in the lines above because adding `-q` to the config's own `-q` gives `-qq`, which prints
 progress but no summary line - the numbers in this page would otherwise be unrepeatable.

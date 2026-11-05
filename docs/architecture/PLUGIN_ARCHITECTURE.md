@@ -11,8 +11,8 @@ hot-reload and no sandbox.
 | Group | `levix.plugins` | `registry.GROUP` |
 | Declared by LEVIX itself | seven entries, each `NAME = "levix.modules.<pkg>:MANIFEST"` | `pyproject.toml` `[project.entry-points."levix.plugins"]` |
 | Lookup | `importlib.metadata.entry_points(group="levix.plugins")` | `registry._entry_points` |
-| Test injection | `ModuleRegistry(extra_entry_points=(EntryPoint…))` | `registry.py:34`, merged at `registry.py:75-76` |
-| Cache | `discover()` fills `self._cache` once per registry | `registry.py:38-73` |
+| Test injection | `ModuleRegistry(extra_entry_points=(EntryPoint…))` | `registry.py:33`, merged at `registry.py:74-75` |
+| Cache | `discover()` fills `self._cache` once per registry | `registry.py:37-72` |
 | Deliberately absent | "no `sys.path` scanning and no drop-in folder import in this phase, because standard metadata entry points already answer 'what is installed'" | `registry.py:3-7` |
 
 For each entry point:
@@ -40,16 +40,16 @@ asserts it, and the mechanism is that step 4 and 5 always run against `entry_poi
 
 `is_broken(manifest)` is `not manifest.cli_path`. A broken module is still listed, still
 described, still counted by `doctor` as `MISSING`, and never crashes LEVIX. The comment at
-`registry.py:47-48` states the rule: "A broken plugin must not make LEVIX unstartable."
+`registry.py:46-47` states the rule: "A broken plugin must not make LEVIX unstartable."
 
 ## Loading and running
 
 | Concern | Decision |
 |---------|----------|
-| Where the plugin's code is first imported | `registry.build_cli(manifest)` — `_resolve(manifest.cli_path)` — "The single deferred-import site for module CLIs" (`registry.py:94-97`) |
+| Where the plugin's code is first imported | `registry.build_cli(manifest)` — `_resolve(manifest.cli_path)` — "The single deferred-import site for module CLIs" (`registry.py:93-96`) |
 | Format of `cli_path` | `"package.module:attribute"`; `partition(":")`, then `importlib.import_module` and `getattr`. With no colon the module object itself is returned |
 | Who calls it | `router._forward`, once per invocation |
-| Screens | `registry.build_screen(manifest)` resolves `UiSpec.screen_path`; it raises `LookupError("module 'x' declares no dashboard screen")` when absent, and no manifest in the tree uses it |
+| Dashboard membership and argv | `module_list.build_rows` lists every discovered manifest except one whose `ui.mode` is `"hidden"`; `app._argv_for` then runs `ui.argv`, or `<name> -h` when the module declared no argv. There is no embedding path: the dashboard owns the TTY until `App.suspend()` hands it over |
 | Isolation | none. The plugin's `build_app()` runs in LEVIX's interpreter, with LEVIX's import access and the invoking user's filesystem and network rights |
 
 ## The SDK
@@ -77,7 +77,7 @@ read are two display functions:
 
 | Surface | What it prints |
 |---------|----------------|
-| `levix plugins info NAME` | `permissions: audio, fs_read, network, subprocess` and, for a `THIRD_PARTY` module that declares any, the sentence "note: declared permissions are a promise by the author, not an enforced limit. Python plugins can do anything LEVIX can." (`plugins_cmd.py:84-91`) |
+| `levix plugins info NAME` | `permissions: audio, fs_read, network, subprocess` and, for a `THIRD_PARTY` module that declares any, the sentence "note: declared permissions are a promise by the author, not an enforced limit. Python plugins can do anything LEVIX can." (`plugins_cmd.py:88-95`) |
 | dashboard `_describe` | `permissions <values>` when the set is non-empty (`dashboard/app.py:284-286`) |
 
 Full analysis, per-module table and the honest limits: `../security/PERMISSIONS.md`.
@@ -147,10 +147,22 @@ environment as LEVIX, which is the only supported route, and `levix doctor` and
    scaffold exercises the alias path in `router.register_modules`.
    `plugin-examples/hello` does: its `greet` command declares `aliases=("hi",)`, and
    `tests/test_plugin_example.py` runs `levix hi alias --times 3` through the real router.
-3. **`mode="screen"` and `screen_path` are unreachable in practice.** No manifest sets
-   them, `build_screen` is only tested for its failure branch
-   (`tests/test_registry.py:166-169`), and the dashboard has no code path that calls it.
-   Documented API surface, unimplemented capability.
+3. **`mode="screen"` and `screen_path` are gone, and `hidden` now means what it said.** This
+   gap had two halves. The first was dead API: no manifest set `screen`, the dashboard had no
+   code path that called `registry.build_screen`, and one TTY cannot host two Textual apps -
+   so embedding could never have worked without taking the terminal from the dashboard, which
+   is precisely what `suspend` does. `build_screen`, `UiSpec.screen_path` and the `"screen"`
+   literal are deleted rather than left as a promise. The second half was worse: `UiSpec`'s
+   own docstring said `hidden` meant "not offered by the dashboard" while `build_rows` listed
+   every discovered manifest and `_argv_for` read only `argv`, so the example plugin's
+   `UiSpec(mode="hidden")` hid nothing at all. `build_rows` filters now, and four cases hold
+   the line: `tests/test_dashboard.py::test_a_module_hidden_from_the_dashboard_gets_no_row`,
+   `::test_a_hidden_module_reaches_no_widget_the_app_builds`,
+   `::test_no_official_module_hides_itself_from_the_dashboard` and
+   `tests/test_registry.py::test_a_module_hidden_from_the_dashboard_is_still_discovered_and_routable`
+   - hiding is the dashboard's rule, not the router's. `levix plugins info` also stopped
+   printing `not offered` for a manifest that declares no `UiSpec`: the dashboard offers such
+   a module with the default mode, so the disclosure line contradicted the behaviour.
 4. **Origin stamping trusts the distribution name.** `_origin_for` treats
    `provider == "levix"` as official, which is correct, but the fallback
    `provider == "" and name in OFFICIAL_NAMES` also marks official any entry point whose

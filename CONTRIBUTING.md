@@ -43,9 +43,9 @@ pre-commit install
 ruff check src tests plugin-examples
 ruff format src tests plugin-examples
 mypy                                # [tool.mypy].files already includes plugin-examples
-pytest                          # all 743 cases; no network, no real TTY
+pytest                          # all 748 cases; no network, no real TTY
 pytest -m integration           # only the 10 that touch a device or a real OS tool
-pytest -m "not integration"     # the CI-safe subset (733 cases)
+pytest -m "not integration"     # the CI-safe subset (738 cases)
 levix doctor
 ```
 

@@ -21,14 +21,14 @@ modules and third-party plugins implement exactly the same shape.
 | `extras` | `tuple[str, …]` | no | `resolved_install_hint` | the pip extra names, `("tube",)`, `("ai",)` |
 | `capabilities` | `tuple[str, …]` | no | nothing at runtime (see gap 1) | not enforced; the names do not have to match `capabilities.PROBES` |
 | `permissions` | `frozenset[Permission]` | no | `plugins info`, dashboard `_describe` | disclosure only, see `../security/PERMISSIONS.md` |
-| `ui` | `UiSpec \| None` | no | dashboard `_argv_for`, `plugins info` | `mode` is one of `screen`, `suspend`, `hidden`; all seven modules use `suspend` |
+| `ui` | `UiSpec \| None` | no | dashboard `module_list.build_rows` (membership) and `app._argv_for` (the line it runs), `plugins info` | `mode` is `suspend` (the default) or `hidden`; the seven official modules all use `suspend`, `plugin-examples/hello` hides itself, and `None` means "default: suspend, no argv" |
 | `install_hint` | `str \| None` | no | `deps`, `plugins info` | overrides the derived line; only `hacker` uses it |
 | `documentation` | `str \| None` | no | `plugins info` | a repository-relative path |
 | `origin` | `Origin` | no (default `THIRD_PARTY`) | hint derivation, `plugins list` | **the registry overwrites it**; a plugin cannot claim `OFFICIAL` |
 | `provider` | `str` | no (default `""`) | hint derivation, `_origin_for` | **the registry overwrites it** from `entry_point.dist.name` |
 
 There is exactly **one** contract, and it is data plus one callable. `registry.build_cli`
-resolves `cli_path` to a callable and calls it (`registry.py:94-97`, `_resolve` at `119-124`),
+resolves `cli_path` to a callable and calls it (`registry.py:93-96`, `_resolve` at `112-117`),
 the entry point resolves to a `ModuleManifest` *instance*, and what `levix create-module`
 scaffolds is the same pair the seven official modules export: a module-level `MANIFEST` and a
 `build_app()` function (`create_module_cmd.py:109`, `:111`, `:124`). `module.LevixModuleProtocol`
@@ -78,7 +78,7 @@ comment in each `core.py` records that.
 | 2 | `app.py:83` | root callback builds `LevixContext` (paths, config, logging, database, profile) and puts it on `ctx.obj` |
 | 3 | `router.py:60` | the thin `tube` command runs; `ctx.args` is `["download", "URL", "--convert-to", "mp3"]` |
 | 4 | `router.py:81` | `manifest.cli_path` is non-empty, so the module is loadable |
-| 5 | `registry.py:94` | `build_cli` → `_resolve("levix.modules.tube.cli:build_app")` → `importlib.import_module` (`registry.py:122`) — the only deferred-import site |
+| 5 | `registry.py:93` | `build_cli` → `_resolve("levix.modules.tube.cli:build_app")` → `importlib.import_module` (`registry.py:115`) — the only deferred-import site |
 | 6 | `tube/cli.py:55` | `build_app()` builds a Typer named `tube`, `callback=_gate`, registering `info`, `download`, `play` from `MANIFEST.commands` |
 | 7 | `router.py:99-104` | `command.main(args=[*prefix, *ctx.args], prog_name="levix tube", standalone_mode=False, obj=ctx.obj)` — `prefix` is empty for the module's own name and carries the canonical subcommand for an alias |
 | 8 | `tube/cli.py:49-52` | `_gate` sees a subcommand, calls `gate(MANIFEST)`, which gates against the registry's stamped manifest (`deps.py:135-147`); with yt-dlp absent this raises `DependencyError` → exit 3 |

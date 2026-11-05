@@ -131,6 +131,15 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   same way the other width-sensitive cases in this suite do. At the 80 columns Rich assumes for
   a captured stdout, CI's Ubuntu runner wrapped the cap notice after "showing" and the
   assertion was reading half a sentence.
+- `UiSpec` has two modes, not three. `mode="screen"`, its `screen_path` partner and
+  `registry.build_screen` are deleted: nothing called them, no official module declared them,
+  and they could not have worked - the dashboard is itself a Textual app, one TTY hosts one
+  Textual app, and a module that wants the screen whole has to take the terminal *from* the
+  dashboard, which is exactly what `suspend` already does. `mode` is now
+  `Literal["suspend", "hidden"]` (`src/levix/module.py:67-81`) and its docstring states the
+  reason instead of advertising a third option. Removing a field from a dataclass that
+  `levix.sdk` re-exports is only safe because nothing has been published yet; after the first
+  release this is a breaking change and has to be handled as one.
 
 ### Fixed
 
@@ -247,7 +256,7 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   wrote `permissions=frozenset({"Permission.FS_READ"})` - a **string** that looks like the enum
   member - while `docs/architecture/PLUGIN_ARCHITECTURE.md` documented
   `frozenset({Permission.FS_READ})`. Discovery accepted it, the router accepted it, and then
-  `levix plugins info <name>` asked the string for `.value` (`commands/plugins_cmd.py:84-85`, and
+  `levix plugins info <name>` asked the string for `.value` (`commands/plugins_cmd.py:88-89`, and
   the dashboard reads `p.value` the same way at `dashboard/app.py:284-285`) and died in the
   disclosure report - the one command whose whole job is to tell a user what a plugin claims.
 - The same template's command body interpolated `{display}`, a name that exists only inside the
@@ -264,6 +273,34 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   `Typer` has no `_name`, so a brand-new plugin was red on `pytest` before its author had written
   a line. It asserts `build_app().info.name` now, and the generator's test case runs that
   generated suite in a child interpreter so this class of drift cannot come back.
+- `mode="hidden"` was documented and did nothing. `module_list.build_rows` returned every
+  manifest it was handed, so a plugin that asked to stay out of the dashboard got a ready,
+  launchable row anyway - and `plugin-examples/hello` had been declaring exactly that
+  declaration as decoration. Calling the row builder with a hidden manifest proved the
+  docstring false before any code changed. Membership now has one filter, in the one function
+  that builds rows (`dashboard/module_list.py:94-106`), pinned by four cases:
+  `tests/test_dashboard.py::test_a_module_hidden_from_the_dashboard_gets_no_row`,
+  `::test_a_hidden_module_reaches_no_widget_the_app_builds` (the `ListView`'s children and
+  `app.rows` must agree), `::test_no_official_module_hides_itself_from_the_dashboard` (the new
+  filter must not quietly empty the real dashboard), and
+  `tests/test_plugin_example.py::test_the_hidden_example_is_discovered_but_gets_no_dashboard_row`,
+  which installs the example the way `pip` would and asserts both halves - no row, and
+  `plugins info` still reporting `dashboard : hidden`. Three cases in
+  `tests/test_markup_safety.py` had used `mode="hidden"` as inert filler; with the flag now
+  doing something they would have filtered out their own rows, so they declare a plain
+  `UiSpec()`.
+- `levix plugins info` printed `dashboard : not offered` for a manifest that declares no
+  `UiSpec` at all - the opposite of what the dashboard does with that manifest, which lists it
+  and runs `<name> -h`. The disclosure line now names the effective mode,
+  `suspend (no UiSpec declared)` (`commands/plugins_cmd.py:88-94`), and
+  `tests/test_dashboard.py::test_a_manifest_with_no_uispec_is_disclosed_as_offered_by_default`
+  pins the new string and the absence of the old one.
+- A module hidden from the dashboard is still a command. The deleted `build_screen` test made
+  way for
+  `tests/test_registry.py::test_a_module_hidden_from_the_dashboard_is_still_discovered_and_routable`,
+  which discovers a `hidden` manifest through the real loader and then asks the registry for it
+  by name - `hidden` is a display rule, and a display rule must not be able to take a
+  subcommand away.
 
 ### Verification
 
@@ -273,13 +310,14 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   issues in 61 source files - `src/levix` plus the example plugin, which is what
   `[tool.mypy].files` declares and what CI now runs - and `--platform win32`, `--platform linux`
   and `--platform darwin` each report the same 61 clean, re-run against this tree because
-  `create_module_cmd._template` and `secrets._write_file` are in it.
+  `create_module_cmd._template`, `secrets._write_file`, `module.UiSpec`, `registry` and
+  `dashboard/module_list` are all in it.
 - The suite, on this machine: `.venv/Scripts/python.exe -m pytest -o addopts="" -q` runs
-  **612 test functions in 21 files, collecting 743 parametrised cases** and reports
-  **735 passed, 8 skipped, 2 warnings in 115.34 s**, exit 0. The same tree without the ten
+  **617 test functions in 21 files, collecting 748 parametrised cases** and reports
+  **740 passed, 8 skipped, 2 warnings in 101.57 s**, exit 0. The same tree without the ten
   `integration` cases - which is what every CI column runs - is
-  **725 passed, 8 skipped, 10 deselected in 101.64 s**, and those ten alone are
-  **10 passed, 733 deselected, 2 warnings in 10.77 s**. Eight skips, and each names its reason:
+  **730 passed, 8 skipped, 10 deselected in 95.72 s**, and those ten alone are
+  **10 passed, 738 deselected, 2 warnings in 10.06 s**. Eight skips, and each names its reason:
   five symlink cases in `tests/modules/test_files.py` (this account cannot create symlinks; three
   more state that POSIX symlinks need no privilege there) and the three POSIX-only permission
   cases in `tests/test_secrets.py`, which CI run #6 executed on the Ubuntu and macOS columns

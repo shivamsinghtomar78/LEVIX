@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from levix.dashboard import module_list
 from levix.module import Origin
 from levix.registry import ModuleRegistry
 
@@ -100,6 +101,23 @@ def test_the_plugin_is_listed_with_the_modules_the_core_ships(run_cli, hello_ins
     out = capsys.readouterr().out
     assert "hello" in out
     assert "third_party" in out or "third-party" in out
+
+
+def test_the_hidden_example_is_discovered_but_gets_no_dashboard_row(
+    run_cli, hello_installed, capsys
+):
+    """The example declares `mode="hidden"`, and this is the whole meaning of that field.
+
+    Two halves, both measured against the real plugin rather than a stub: `levix hello`
+    still runs (the case above), and the dashboard offers no row for it. The field's
+    docstring claimed the second half and `build_rows` ignored it, which no stub-based test
+    would have caught: the example is the only manifest in the tree that asks to be hidden.
+    """
+    registry = ModuleRegistry()
+    assert "hello" in registry.names(), "hiding is not unregistering"
+    assert "hello" not in {row.name for row in module_list.build_rows(registry)}
+    assert run_cli("plugins", "info", "hello") == 0
+    assert "dashboard : hidden" in " ".join(capsys.readouterr().out.split())
 
 
 def test_the_example_itself_imports_nothing_heavy_at_manifest_time(hello_installed):

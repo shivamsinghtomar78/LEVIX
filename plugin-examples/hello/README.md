@@ -36,7 +36,7 @@ router prefixes the aliased subcommand when it forwards. The core uses the same 
 | `requirements` | `levix.deps` gate | decides exit 3 (`MISSING_DEPENDENCY`) before any import is attempted |
 | `extras`, `install_hint` | gate messages, `doctor` | how to get what is missing |
 | `permissions` | `levix plugins info`, the dashboard | disclosure to a human, not enforcement (see below) |
-| `ui` | the dashboard | `suspend`, `screen`, or `hidden` - this example hides itself |
+| `ui` | the dashboard | `suspend` (the default) or `hidden` - this example hides itself, and still runs as `levix hello` |
 | `documentation` | `levix plugins info`, the dashboard | where the real docs live |
 
 `origin` and `provider` are **stamped by the registry**, never taken from the plugin: a

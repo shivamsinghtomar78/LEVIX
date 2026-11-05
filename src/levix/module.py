@@ -1,7 +1,7 @@
 """The registration contract shared by official modules and third-party plugins.
 
-A module is *data* plus two factories. Keeping the manifest free of imports is what
-makes lazy `levix --help` possible: the registry can list every module without
+A module is *data* plus one factory - `cli_path`. Keeping the manifest free of imports
+is what makes lazy `levix --help` possible: the registry can list every module without
 importing a single heavy dependency.
 """
 
@@ -66,17 +66,18 @@ class CommandInfo:
 
 @dataclass(frozen=True, slots=True)
 class UiSpec:
-    """How the dashboard launches this module.
+    """How the dashboard offers this module.
 
-    `screen`  -> push a Textual screen inside the running dashboard (widget-only work).
     `suspend` -> release the terminal and re-enter `levix <cmd>` in a subprocess.
-    `hidden`  -> not offered by the dashboard.
+    `hidden`  -> the dashboard lists no row for it; `levix <cmd>` still works.
 
-    One TTY cannot host two Textual apps, so full-screen modules MUST use `suspend`.
+    There is deliberately no embedding mode. The dashboard is itself a Textual app and
+    one TTY cannot host two, so a module that wants the screen whole has to take the
+    terminal *from* the dashboard - which is exactly what `suspend` does. `argv` is the
+    command line the dashboard runs; an empty `argv` opens the module's own help page.
     """
 
-    mode: Literal["screen", "suspend", "hidden"] = "suspend"
-    screen_path: str | None = None
+    mode: Literal["suspend", "hidden"] = "suspend"
     argv: tuple[str, ...] = ()
 
 

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import pytest
 
 from levix import registry as registry_module
-from levix.module import CommandInfo, ModuleManifest, Origin, PackageRef, Permission
+from levix.module import CommandInfo, ModuleManifest, Origin, PackageRef, Permission, UiSpec
 from levix.registry import ModuleRegistry, is_broken
 
 OFFICIAL = {"ai", "files", "game", "hacker", "monitor", "music", "tube"}
@@ -163,10 +163,26 @@ def test_active_registry_is_injectable_and_resettable():
     assert registry_module.active() is not stub
 
 
-def test_build_screen_refuses_a_module_that_declares_none():
-    manifest = ModuleManifest(name="noscreen", title="N", summary="s", cli_path="x:build_app")
-    with pytest.raises(LookupError, match="declares no dashboard screen"):
-        ModuleRegistry().build_screen(manifest)
+def test_a_module_hidden_from_the_dashboard_is_still_discovered_and_routable():
+    """`mode="hidden"` is a dashboard rule, so it cannot take a command away.
+
+    Discovery, `levix --help` and the router all still see the module; only
+    `dashboard.module_list.build_rows` reads the field, and its own tests say so.
+    """
+    manifest = ModuleManifest(
+        name="shy",
+        title="Shy",
+        summary="a plugin that asks for no dashboard row",
+        cli_path="levix.modules.tube.cli:build_app",
+        ui=UiSpec(mode="hidden"),
+    )
+    globals()["SHY_MANIFEST"] = manifest
+    registry = _StubRegistry(_Point("shy", "test_registry:SHY_MANIFEST", _Provider("acme", "1.0")))
+    assert registry.names() == ("shy",)
+    declared = registry.discover()["shy"]
+    assert declared.ui is not None
+    assert declared.ui.mode == "hidden"
+    assert registry.get("shy") is declared, "a hidden module still routes"
 
 
 def test_permissions_are_a_closed_disclosure_set():

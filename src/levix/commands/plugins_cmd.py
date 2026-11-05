@@ -79,7 +79,11 @@ def info(typer_ctx: typer.Context, name: str) -> None:
     console.print(f"  version    : {markup_safe(manifest.version or '-')}")
     console.print(f"  cli entry  : {markup_safe(manifest.cli_path or '(unavailable)')}")
     console.print(f"  commands   : {markup_safe(', '.join(manifest.command_names()) or '-')}")
-    console.print(f"  dashboard  : {manifest.ui.mode if manifest.ui else 'not offered'}")
+    # A manifest with no `UiSpec` is not hidden: the dashboard offers it with the default
+    # mode and no argv, so saying "not offered" here would describe the opposite.
+    console.print(
+        f"  dashboard  : {manifest.ui.mode if manifest.ui else 'suspend (no UiSpec declared)'}"
+    )
     console.print(f"  docs       : {markup_safe(manifest.documentation or '-')}")
     if manifest.permissions:
         granted = ", ".join(sorted(p.value for p in manifest.permissions))

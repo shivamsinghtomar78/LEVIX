@@ -50,14 +50,23 @@ BROKEN = ModuleManifest(
     summary="failed to load: ModuleNotFoundError: there is no ghost",
     cli_path="",
 )
+HIDDEN = ModuleManifest(
+    name="hello",
+    title="Hello",
+    summary="Example plugin that asks for no dashboard row.",
+    cli_path="levix_hello.cli:build_app",
+    ui=UiSpec(mode="hidden"),
+)
 
 
 class _StubRegistry(ModuleRegistry):
     """A registry whose contents are fixed, so the UI is tested against known rows."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, manifests: tuple[ModuleManifest, ...] = (READY, NEEDS_INSTALL, BROKEN)
+    ) -> None:
         super().__init__()
-        self._manifests = {m.name: m for m in (READY, NEEDS_INSTALL, BROKEN)}
+        self._manifests = {m.name: m for m in manifests}
 
     def discover(self) -> dict[str, ModuleManifest]:
         return dict(self._manifests)
@@ -105,13 +114,44 @@ def test_filtering_matches_name_title_and_summary():
     assert module_list.filter_rows(rows, "nothing like this") == []
 
 
-def test_launching_a_declared_screen_reuses_its_argv():
+def test_launching_the_declared_argv_runs_that_command_line():
     assert _argv_for(READY, module_list.row_for(READY)) == ("monitor", "live")
 
 
-def test_a_module_with_no_declared_screen_opens_its_help():
+def test_a_module_that_declares_no_argv_opens_its_help():
     row = module_list.row_for(NEEDS_INSTALL)
     assert _argv_for(NEEDS_INSTALL, row) == ("music", "-h")
+
+
+def test_a_module_hidden_from_the_dashboard_gets_no_row():
+    """`mode="hidden"` is the one manifest field that changes membership, not wording."""
+    rows = module_list.build_rows(_StubRegistry((HIDDEN, READY, NEEDS_INSTALL)))
+    assert [row.name for row in rows] == ["monitor", "music"]
+
+
+def test_a_manifest_with_no_uispec_is_disclosed_as_offered_by_default(run_cli, capsys):
+    """`plugins info` used to print `not offered` for the modules the dashboard does offer.
+
+    A manifest that declares no `UiSpec` gets the default mode and `<name> -h` as its argv -
+    `ghost` and `music` in the rows above are both listed. The disclosure line has to
+    describe the app, not the field.
+    """
+    registry_module.use(_StubRegistry((NEEDS_INSTALL,)))
+    assert run_cli("plugins", "info", "music") == 0
+    printed = " ".join(capsys.readouterr().out.split())
+    assert "dashboard : suspend (no UiSpec declared)" in printed
+    assert "not offered" not in printed
+
+
+def test_no_official_module_hides_itself_from_the_dashboard():
+    """`levix --help` and the dashboard have to list the same seven.
+
+    `hidden` exists for an example plugin that should not clutter a real profile. An
+    official module using it would make the two surfaces disagree about what is installed,
+    and nothing else in the suite would notice.
+    """
+    offered = {row.name for row in module_list.build_rows(ModuleRegistry())}
+    assert {"monitor", "hacker", "files", "tube", "game", "music", "ai"} <= offered
 
 
 def test_a_plugin_that_names_no_provider_does_not_invent_a_pip_line():
@@ -178,6 +218,24 @@ def test_dashboard_lists_every_module_and_reflects_the_filter(levix_home, stub_r
         assert app.rows[0].name == "monitor"
         await pilot.pause()
         assert len(app.query_one("#modules", ListView).children) == 1
+
+    _drive(app, steps)
+
+
+def test_a_hidden_module_reaches_no_widget_the_app_builds(levix_home):
+    """The list, `app.rows` and the filter all come from `build_rows`, so all three agree.
+
+    Filtering anywhere later - in `filter_rows`, or in the view - would let the row back
+    in the moment the user cleared the filter.
+    """
+    registry_module.use(_StubRegistry((READY, NEEDS_INSTALL, HIDDEN)))
+    app = LevixDashboard()
+
+    async def steps(pilot):
+        await pilot.pause()
+        list_view = app.query_one("#modules", ListView)
+        assert [child.name for child in list_view.children] == ["monitor", "music"]
+        assert [row.name for row in app.rows] == ["monitor", "music"]
 
     _drive(app, steps)
 

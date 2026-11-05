@@ -91,7 +91,7 @@ def test_a_plugins_info_install_line_keeps_the_extra(levix_home, capsys):
         extras=("tube",),
         origin=Origin.OFFICIAL,
         documentation="docs/modules/[TUBE].md",
-        ui=UiSpec(mode="hidden"),
+        ui=UiSpec(),
         permissions=frozenset({Permission.FS_READ}),
     )
     _install(manifest)
@@ -109,7 +109,7 @@ def test_the_dashboard_list_keeps_a_plugins_own_brackets():
         title="Brackets",
         summary="needs [care] in the list",
         cli_path="levix.modules.tube.cli:build_app",
-        ui=UiSpec(mode="hidden"),
+        ui=UiSpec(),
     )
     row = module_list.row_for(manifest)
     assert "[care]" in _render(row.label())
@@ -126,7 +126,7 @@ def test_the_detail_panel_escapes_every_manifest_field():
         requirements=(PackageRef("pkg[name]", minimum="1.0"),),
         documentation="docs/[x].md",
         permissions=frozenset({Permission.FS_READ}),
-        ui=UiSpec(mode="hidden"),
+        ui=UiSpec(),
     )
     row = module_list.row_for(manifest)
     rendered = _render(_describe(manifest, row))

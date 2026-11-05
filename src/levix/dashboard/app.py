@@ -255,9 +255,9 @@ class LevixDashboard(App[None]):
 def _argv_for(manifest: ModuleManifest | None, row: ModuleRow) -> tuple[str, ...]:
     """The command line this row actually runs.
 
-    A module that declares a dashboard screen with its own argv (Snake, the file browser,
-    the live monitor) gets it; everything else opens the module's own help, which beats
-    dropping the user into a command that expects arguments.
+    A module that declares the screen it wants, with the argv that opens it (Snake, the
+    file browser, the live monitor), gets that line; everything else opens the module's
+    own help, which beats dropping the user into a command that expects arguments.
     """
     if manifest is not None and manifest.ui is not None and manifest.ui.argv:
         return tuple(manifest.ui.argv)
