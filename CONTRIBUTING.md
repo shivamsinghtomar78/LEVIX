@@ -43,17 +43,21 @@ pre-commit install
 ruff check src tests plugin-examples
 ruff format src tests plugin-examples
 mypy                                # [tool.mypy].files already includes plugin-examples
-pytest                          # all 698 cases; no network, no real TTY
-pytest -m integration           # only the 8 that touch a device or a real OS tool
-pytest -m "not integration"     # the CI-safe subset (690 cases)
+pytest                          # all 705 cases; no network, no real TTY
+pytest -m integration           # only the 10 that touch a device or a real OS tool
+pytest -m "not integration"     # the CI-safe subset (695 cases)
 levix doctor
 ```
 
 `.github/workflows/ci.yml` runs this same set - plus a job that installs the built wheel
 with **no** extras and asserts the heavy modules refuse with exit 3 - on
-`ubuntu-latest`, `macos-latest` and `windows-latest` against Python 3.12 and 3.13. The
-hooks in `.pre-commit-config.yaml` mirror the lint, format and type steps so CI is not a
-surprise; the suite is not in a hook because it takes ~2.5 minutes.
+`ubuntu-latest`, `macos-latest` and `windows-latest` against Python 3.12 and 3.13. Write
+tests that do not depend on the machine: a case that needs sound hardware, a symlink the
+runner may not be allowed to create, or a terminal width is an `integration` case or is
+given its width explicitly, because a runner that disagrees with your laptop is the only
+way this project finds out. The hooks in `.pre-commit-config.yaml` mirror the lint, format
+and type steps so CI is not a surprise; the suite is not in a hook because it takes ~2.5
+minutes.
 
 Every command needs: help text, argument validation, a predictable exit code, an entry
 in the exit-code table if it is a new failure class, and a test. If you add a

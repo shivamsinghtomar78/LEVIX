@@ -159,6 +159,14 @@ Single process per command, one-shot, no daemon, no background jobs.
   `docs/development/` trees: SDK material lives in this directory's
   `PLUGIN_ARCHITECTURE.md`, coding standards in `../../CONTRIBUTING.md`, security in
   `../security/THREAT_MODEL.md` and `../security/PERMISSIONS.md`.
-* Verification in this document set was performed on Windows (`sys.platform = "win32"`).
-  `paths.resolve_paths` and `terminal.detect` have POSIX branches that the code reads
-  correctly but that were not executed here.
+* The hand runs behind this document set were performed on Windows (`sys.platform =
+  "win32"`). GitHub Actions has since executed the non-integration suite on Ubuntu and macOS
+  as well: run #3 made **all six columns red on eight test functions that depend on the
+  machine they run on** - escape codes in help output, because typer forces a terminal
+  whenever `GITHUB_ACTIONS` is set (every platform); a deletion that judged a symlink by its
+  target rather than by its own place (Ubuntu, macOS); the `\\?\` device form `os.readlink`
+  returns for a Windows link; two tests that asked a headless runner which sound cards it
+  has; a 68-character macOS hostname that did not fit a table column; and a notice that
+  wrapped at 80 columns. Each is fixed in the tree, and the fixes are proven by the next
+  run rather than by this page. Until every column is green, nothing here may be quoted as
+  cross-platform verified - `docs/roadmap/CURRENT_STATUS.md` names each one.

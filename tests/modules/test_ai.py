@@ -730,6 +730,10 @@ def test_ask_uses_piped_stdin_as_the_prompt(run_cli, capsys, monkeypatch):
 
 
 def test_explain_sends_only_the_capped_prefix(run_cli, capsys, monkeypatch, tmp_path):
+    # The cap notice is one sentence and the assertion reads it as one sentence. At the 80
+    # columns Rich assumes when stdout is captured, CI's Ubuntu runner wrapped it after
+    # "showing", so the width is fixed rather than the assertion softened.
+    monkeypatch.setenv("COLUMNS", "200")
     path = tmp_path / "code.py"
     path.write_text("x" * 400, encoding="utf-8")
     seen = _install_transport(monkeypatch, lambda request: _json_response(OPENAI_REPLY))

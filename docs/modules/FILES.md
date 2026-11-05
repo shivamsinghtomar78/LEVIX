@@ -137,7 +137,9 @@ instead.
   shares and case-insensitivity are handled by pathlib rather than by hand;
 * `Path.resolve()` collapses `..` and follows links, so the comparison is made on the real
   location, not on what was typed - a detour that ends back inside the wall is allowed
-  (`test_resolve_allows_a_detour_that_ends_back_inside`);
+  (`test_resolve_allows_a_detour_that_ends_back_inside`). `delete` is the one command that
+  does not follow a link, and so the one command that does not judge one by its target:
+  see §Symbolic links;
 * relative arguments keep shell semantics (resolved against the current directory); the
   wall only decides what is allowed, never where a name is looked up.
 
@@ -162,7 +164,18 @@ Wall defaults differ per command, and this matters:
 * `delete` removes a link as a link and never its target
   (`test_deleting_a_link_removes_the_link_and_never_the_target`), including the
   Windows/POSIX split in `core.remove_entry` where a linked directory must go via
-  `os.unlink` or `os.rmdir` depending on platform;
+  `os.unlink` or `os.rmdir` depending on platform. Because removal touches only the link
+  record - it frees no bytes from the target and cannot write outside anything - the wall is
+  applied to **the link's own location**, so a link inside `ROOT` pointing outside it is
+  deletable. Judging that removal by the target was a defect, found by CI run #3 on Ubuntu
+  and macOS, where it refused the safe case. `core.resolve(..., keep_link=True)` is used by
+  no other command, precisely because reading, copying and moving *do* follow a link. The
+  decision is pinned by `test_a_link_deleted_as_a_link_is_judged_at_its_own_place`, which
+  fakes "is a link" and "resolves outside" so it also runs on an account that cannot create
+  one;
+* a link target is shown as the user would type it: `core.strip_device_prefix` drops the
+  `\\?\` DOS-device form that `os.readlink()` returns for an absolute Windows link and turns
+  `\\?\UNC\server\share` into `\\server\share`;
 * metadata is `lstat`-based: a link reports the length of the link record, a broken link is
   still "an existing entry", and `core.file_size()` returns 0 for links because deleting one
   frees no payload.

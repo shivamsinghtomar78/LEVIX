@@ -168,6 +168,42 @@ def test_resolve_refuses_a_sibling_that_shares_a_name_prefix(tmp_path):
         core.resolve(tmp_path / "abc" / "f.txt", root=root)
 
 
+def test_a_link_deleted_as_a_link_is_judged_at_its_own_place(tmp_path, monkeypatch):
+    """`keep_link` moves the wall from the target to the link, for deletion only.
+
+    The two facts this branch reads - "is a link" and "resolves outside" - cannot both be
+    produced portably: Windows needs developer mode to create a link at all, and a
+    junction answers `islink() == False` while `resolve()` still follows it. So the facts
+    are faked and the decision is tested. The delete tests at the end of this file do the
+    same against a real link, wherever the OS will make one.
+    """
+    root = tmp_path / "root"
+    root.mkdir()
+    link = root / "link.txt"
+    outside = _write(tmp_path / "sensitive.txt", "precious\n")
+
+    real_resolve = Path.resolve
+
+    def fake_islink(path):
+        return Path(path).name == "link.txt"
+
+    def fake_resolve(self, *, strict=False):
+        if self == link:
+            return outside  # what following the link would reach
+        return real_resolve(self, strict=strict)
+
+    monkeypatch.setattr(os.path, "islink", fake_islink)
+    monkeypatch.setattr(Path, "resolve", fake_resolve)
+
+    wall = real_resolve(root, strict=False)
+    kept = core.resolve(link, root=root, label="deletion target", keep_link=True)
+    assert kept == wall / "link.txt", "the plan must name the link itself, not its target"
+    assert outside.exists(), "and nothing outside the wall may be touched"
+
+    with pytest.raises(UnsafePathError, match="outside the wall"):
+        core.resolve(link, root=root)
+
+
 def test_resolve_needs_no_root_and_never_touches_the_disk(tmp_path):
     missing = tmp_path / "no" / "such" / "dir"
     assert core.resolve(missing) == missing.resolve(strict=False)
@@ -521,6 +557,22 @@ def test_preview_of_a_symlink_reports_the_link_not_the_target(tmp_path):
     assert result.kind == "symlink"
     assert result.entry.link_target == str(target)
     assert result.entry.size_bytes == os.lstat(link).st_size
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        ("\\\\?\\C:\\Users\\me\\target.txt", "C:\\Users\\me\\target.txt"),
+        ("\\\\?\\UNC\\server\\share\\f.txt", "\\\\server\\share\\f.txt"),
+        ("\\??\\C:\\Users\\me\\target.txt", "C:\\Users\\me\\target.txt"),
+        ("../elsewhere/f.txt", "../elsewhere/f.txt"),
+        ("/srv/data/target.txt", "/srv/data/target.txt"),
+    ],
+)
+def test_the_device_prefix_windows_stores_in_a_link_is_removed(stored, expected):
+    """Tested on its own, because the account that runs the suite may not be allowed to
+    create a link - and CI's Windows runner is, so the raw form really does appear there."""
+    assert core.strip_device_prefix(stored) == expected
 
 
 def test_preview_unreadable_file_is_a_clean_files_error(tmp_path, monkeypatch):

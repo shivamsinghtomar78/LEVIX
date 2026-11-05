@@ -8,8 +8,9 @@ Two things make these tests unusual and both are deliberate.
 * The audio files are real. soundfile writes genuine WAV/FLAC/OGG/MP3, so the decode path
   is exercised against bytes libsndfile actually parsed, not a mock of it.
 
-The single `integration` test is the exception: it really plays, and skips out loud if
-PortAudio reports no usable output device.
+The three `integration` tests are the exception: one really plays, two really ask the
+operating system which sound hardware it has. Each skips out loud when the machine has
+nothing to answer with, which is why CI's runners do not report them as failures.
 """
 
 from __future__ import annotations
@@ -349,24 +350,46 @@ def test_a_backend_refusal_is_one_clean_message_and_exit_seven(run_cli, capsys, 
 # ----------------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 def test_list_devices_reports_roles_and_defaults():
+    """Asks the operating system what sound hardware it has, so it is an integration test.
+
+    CI run #3 showed why: a runner either has no PortAudio to import (Ubuntu, where the
+    system library simply is not there) or PortAudio that reports zero devices (Windows),
+    and neither is a defect in the listing. Anything PortAudio raises here is the machine
+    answering, not the module.
+    """
     try:
         listing = core.list_devices()
-    except core.BackendError as exc:
-        pytest.skip(f"PortAudio has no device view here: {exc.message}")
-    assert listing.rows
+    except Exception as exc:  # PortAudio is the machine answering, not the module failing
+        pytest.skip(f"PortAudio has no device view on this machine: {type(exc).__name__}: {exc}")
+    if not listing.rows:
+        pytest.skip("this machine reports no audio devices")
     assert all(row.role in ("input", "output", "in+out", "unusable") for row in listing.rows)
     assert listing.mark(listing.rows[0]) in ("", "in", "out", "in+out")
     # The note is the honest fallback: either nothing to say, or a reason playback fails.
     assert listing.note() == "" or "device" in listing.note()
 
 
+@pytest.mark.integration
 def test_devices_command_prints_a_table(run_cli, capsys):
+    """The same hardware question, asked through the command surface.
+
+    Decided before running: `music devices` exits 7 when PortAudio refuses and 1 when the
+    library itself is missing, and letting either reach the assertion would report a
+    silent runner as a broken module.
+    """
+    import sounddevice as sd
+
+    try:
+        devices = sd.query_devices()
+    except Exception as exc:  # PortAudio is the machine answering, not the module failing
+        pytest.skip(f"PortAudio has no device view on this machine: {type(exc).__name__}: {exc}")
+    if not devices:
+        pytest.skip("this machine reports no audio devices")
     code = run_cli("music", "devices")
     text = both(capsys.readouterr())
-    if code == EXIT_TOOL_FAILED:
-        pytest.skip(f"PortAudio refused to list devices here: {text.strip()[:120]}")
-    assert code == 0
+    assert code == 0, text
     assert "Audio devices" in text and "default" in text.lower()
     assert "Traceback" not in text
 

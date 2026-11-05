@@ -7,10 +7,13 @@ Two rules govern the whole set, and they are the reason the pages read the way t
 * **A page says what the code does today, not what the roadmap hopes.** Where something is
   designed but not built, the page says so in a *Known gaps* section instead of describing
   the intention as if it shipped.
-* **A claim is only as good as the platform it was checked on.** Everything here was
-  verified on Windows 11 (`sys.platform = "win32"`), Python 3.12.10. POSIX branches are
-  read, not executed. `docs/roadmap/CURRENT_STATUS.md` states the current verification
-  boundary.
+* **A claim is only as good as the platform it was checked on.** The hand runs behind these
+  pages were made on Windows 11 (`sys.platform = "win32"`), Python 3.12.10. GitHub Actions
+  has now executed the suite on Ubuntu and macOS too, and run #3 put **all six matrix
+  columns red on eight test functions that depend on the machine they run on**. All eight
+  are fixed in the tree, and the fixes are believed only as far as the next run proves them.
+  Nothing in these pages may be quoted as cross-platform verified until every column is
+  green. `docs/roadmap/CURRENT_STATUS.md` names each failure and what it took.
 
 Start with `requirements/PRD.md` for the product, `architecture/SYSTEM_ARCHITECTURE.md`
 for the shape, and `roadmap/CURRENT_STATUS.md` for where the work actually stands.
@@ -69,7 +72,7 @@ into this directory, so `levix plugins info <name>` prints a path that exists.
 | `technology/TECH_STACK.md` | every dependency, its installed version and why it was chosen over the alternative. |
 | `technology/DEPENDENCIES.md` | the core/extras split, licence notes, and the lazy-loading invariant with the tests that prove it. |
 | `technology/PYTHON_PACKAGING.md` | hatchling config, what `python -m build` produces, the throwaway-install verification, and what is still unpublished. |
-| `technology/COMPATIBILITY.md` | Python and OS support matrix, and which parts are proven only on Windows. |
+| `technology/COMPATIBILITY.md` | Python and OS support matrix, and which parts are proven by CI on which runner rather than by hand. |
 | `technology/OPEN_SOURCE_TOOLS.md` | the external programs LEVIX can shell out to (ffmpeg, players, OS network tools) and how each is gated. |
 
 ## decisions/ — the six decisions that shape the rest
@@ -99,7 +102,7 @@ into this directory, so `levix plugins info <name>` prints a path that exists.
 | `CHANGELOG.md` | Release history, with an `Unreleased` section that carries the current work. |
 | `SECURITY.md` | Vulnerability reporting. |
 | `LICENSE` | MIT. |
-| `.github/workflows/ci.yml` | The matrix that runs the lint, type and `-m "not integration"` suite on Linux, macOS and Windows, plus a wheel installed with no extras. Added 2026-11-05 and run once: the wheel job passed on Ubuntu, no matrix column was green. |
+| `.github/workflows/ci.yml` | The matrix that runs the lint, type and `-m "not integration"` suite on Linux, macOS and Windows, plus a wheel installed with no extras. Added 2026-11-05, run three times: the wheel job has passed on Ubuntu every time, and run #3 is the first suite result that can be trusted - red on all six columns, on eight machine-dependent tests. |
 | `.github/workflows/release.yml` | Tag-triggered build, GitHub release and PyPI upload through trusted publishing. Has never run, and cannot until the PyPI project exists. |
 | `plugin-examples/hello/` | A real, installable example plugin: its own `pyproject.toml`, one manifest, one command. |
 | `src/levix/` | The code. Docstring comments explain *why*; this directory explains *what*. |

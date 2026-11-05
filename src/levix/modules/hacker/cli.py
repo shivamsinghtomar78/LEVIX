@@ -331,8 +331,16 @@ def _host_table(facts: core.HostFacts) -> Table:
     table = Table(title="Hacker / this machine", header_style="bold cyan", show_header=False)
     table.add_column("field", style="bold")
     table.add_column("value", overflow="fold")
-    table.add_row(
-        "hostname", f"{_show(facts.hostname)} [dim]({_show(facts.hostname_source)})[/dim]"
+    # The hostname is the caption, not a row: a cell is only as wide as its column, and
+    # `overflow="fold"` splits a name that does not fit in the middle of the token. CI's
+    # macOS runner calls itself `iad20-gt1018-...-C64BF1B94850.local` - 68 characters, 3
+    # more than this table can give it at 80 columns - and the user read it as
+    # `...C64BF1B94850.` newline `local`. A name is the one value here somebody copies,
+    # so it gets a full-width line, which wraps between words instead of inside them.
+    # Raw strings, not `_show`: a `Text` cell is not markup-parsed, so escaping would print
+    # the backslashes it adds.
+    table.caption = Text(
+        f"hostname {facts.hostname} ({facts.hostname_source})", style="dim", justify="left"
     )
     table.add_row("system", _show(facts.system) or "not reported")
     table.add_row("release", _show(facts.release) or "not reported")

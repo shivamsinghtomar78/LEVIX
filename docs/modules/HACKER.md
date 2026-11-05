@@ -102,6 +102,12 @@ Reads, in this order, and prints a table per group:
 | Local interfaces | The same interface table `network` prints. |
 | Sources / notes | The tool table and the missing-data notes. |
 
+The hostname is the line *under* that table rather than a row inside it. A cell is only as
+wide as its column, and CI's macOS runner calls itself a 68-character mDNS name - three
+characters more than the host table can afford at 80 columns - so a row folded it in the
+middle of the token and the user got `iad20-...-C64BF1B94850.` newline `local` for the one
+value here worth copying (`test_a_hostname_longer_than_the_table_stays_in_one_piece`).
+
 `info` deliberately does **not** use `psutil`, and says so in its own output row:
 `physical cores and load averages need psutil, which this module deliberately does not use;
 \`levix monitor\` has them`. Verified against the source: the only imports in `core.py` are

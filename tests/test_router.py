@@ -7,6 +7,7 @@ under test is the forwarding itself, and a stub keeps the heavy dependencies out
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -189,7 +190,7 @@ def test_the_alias_help_shows_the_page_of_the_command_it_aliases(run_cli, stub, 
     subcommand the alias names.
     """
     assert run_cli("nt", "-h") == 0
-    printed = capsys.readouterr().out
+    printed = capsys_text(capsys)
     assert "Usage: levix stub note" in printed, printed
     assert "Record MESSAGE" in printed, printed
 
@@ -253,10 +254,19 @@ def test_a_bad_configuration_value_is_reported_as_a_config_error(run_cli, stub, 
     assert run_cli("stub", "note", "hello") == EXIT_CONFIG
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def capsys_text(capsys) -> str:
-    """stdout and stderr together: click 8.5 sends a group's no-args help to stderr."""
+    """stdout and stderr together, with escape sequences removed.
+
+    click 8.5 sends a group's no-args help to stderr. The escape sequences matter because
+    Typer forces a terminal whenever `GITHUB_ACTIONS` is set (`typer/rich_utils.py:77-82`),
+    so a runner renders `Usage:` in bold and the style splits the literal these tests look
+    for. Colour is not what forwarding is about; the text is.
+    """
     captured = capsys.readouterr()
-    return captured.out + captured.err
+    return _ANSI.sub("", captured.out + captured.err)
 
 
 def _child_heavy_loads(argv: list[str]) -> list[str]:

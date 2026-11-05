@@ -139,7 +139,8 @@ that the archive contains `levix/py.typed` and exactly one `levix/data/defaults.
 what a bare install should report, so a 0 would mean the diagnostic had gone quiet.
 Every command in that job was run by hand on 2026-11-05 against `dist/*.whl` installed into
 an empty venv on this Windows box - the whole list, under `bash -eo pipefail` like the
-runner's default shell, green - and the job then ran on a real Ubuntu runner and passed.
+runner's default shell, green - and the job itself has run on a real Ubuntu runner, in all
+three CI runs, and passed every time.
 
 **`.github/workflows/release.yml`** runs **only on a `v*` tag**, in three jobs:
 
@@ -179,11 +180,20 @@ Confirmed absent from this tree as of writing:
   state the workflows above reach, not today's. `levix update` therefore answers
   `could not check for updates: PyPI returned 404` and exits 8 - verified on this machine on
   2026-11-05 - because it refuses to imply you are up to date when it could not ask.
-- **A green matrix**: run #1 happened on 2026-11-05, on the commit that added the files. The
-  wheel job passed on Ubuntu in 31 s; the four POSIX columns died at `mypy` on a Windows-only
-  stat attribute, and both Windows columns died inside the suite. So the numbers quoted in
-  these pages are still hand runs on one Windows 11 laptop until a column goes green, which
-  is what `docs/roadmap/CURRENT_STATUS.md` says at the top of the page.
+- **A green matrix**: three runs, all on 2026-11-05, on the commits that added the files.
+  Run #1: the wheel job passed on Ubuntu in 31 s; the four POSIX columns died at `mypy` on a
+  Windows-only stat attribute, and both Windows columns died inside the suite. Run #2
+  reported "5 successful and 2 failing" and was wrong in both directions - Actions' default
+  `run:` shell is `bash -e` **without** `pipefail`, so `pytest | tee pytest.log` handed the
+  step tee's exit 0 and Linux/macOS went green over a failing suite, while the Windows jobs
+  died in pwsh before pytest started at all. The job now pins `defaults.run.shell: bash` and
+  redirects to a file instead of piping, and re-emits every `FAILED` line as a `::error::`
+  annotation so a red column names itself to anyone, without a signed-in account. Run #3 is
+  the first trustworthy result: red on all six columns, on eight test functions that depend
+  on the machine they run on. All eight are fixed in the tree and run #4 decides whether that
+  was the whole list, so the numbers quoted in these pages remain hand runs on one Windows 11
+  laptop until a column goes green - which is what `docs/roadmap/CURRENT_STATUS.md` says at
+  the top of its page.
 - **Standalone binaries**: PyInstaller is not installed and not referenced in
   `pyproject.toml`; only `spawn.py::is_frozen()` anticipates a frozen build. A frozen build
   has one thing to prove before it is usable: discovery reads

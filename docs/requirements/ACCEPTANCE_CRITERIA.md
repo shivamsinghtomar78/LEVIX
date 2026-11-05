@@ -1,16 +1,21 @@
 # LEVIX Acceptance Criteria
 
 Each criterion states behaviour asserted by a named test in `tests/` or observable from a documented command. Exit codes are the table in
-`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 580 test functions in 17 files (10 in `tests/`, 7 in `tests/modules/`)
-collecting to 698 parametrised cases, 8 marked `integration`; the hand run behind every line below is `693 passed, 5 skipped` (the five skips
+`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 583 test functions in 17 files (10 in `tests/`, 7 in `tests/modules/`)
+collecting to 705 parametrised cases, 10 marked `integration`; the hand run behind every line below is `700 passed, 5 skipped` (the five skips
 are all symlink cases - this Windows account cannot `os.symlink`, and three of them are POSIX-only by design). All of it was measured
-on Windows 11 with Python 3.12.10 in an editable `.venv` install; no Linux or macOS run backs any line below. `tests/conftest.py` keeps runs
+on Windows 11 with Python 3.12.10 in an editable `.venv` install. GitHub Actions runs
+the same tree minus the 10 `integration` cases on Ubuntu, macOS and Windows; its third run
+was **red on all six columns, on eight test functions that depend on the machine**, and all
+eight are fixed in the tree awaiting a fourth run, so no line below is a cross-platform
+result yet. `tests/conftest.py` keeps runs
 off a real profile (`LEVIX_*` cleared, `LEVIX_HOME` in a temp directory, `NO_COLOR=1`, file logging disabled at `conftest.py:38`, registry
 reset per test) and `run_cli` calls the real entry point `levix.main.main(list(argv))`, so exit codes and history rows are part of what is
-asserted. Checks: `python -m pytest -q` (698 collected, 157.55 s, no network, no real TTY - and yes, that includes the 8 `integration` cases,
-because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m integration` (those 8 alone: `8/698 tests, 690
+asserted. Checks: `python -m pytest -o addopts="" -q` (705 collected, `700 passed, 5 skipped, 2 warnings in 124.42 s`, no network, no real TTY - and yes, that includes the 10
+`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `690 passed, 5 skipped, 10 deselected in 106.02 s`), `python -m pytest -m integration` (those 10 alone: `10 passed, 695
 deselected`), `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests plugin-examples` (both exit 0,
-80 files already formatted), `python -m mypy` (61 files - `[tool.mypy].files` also covers the example plugin - no issues), `levix doctor`. Citations: a bare `file.py:line` is under `src/levix/`; `tests/FILE.py` names a test file (module tests are
+80 files already formatted), `python -m mypy` (61 files - `[tool.mypy].files` also covers the example plugin - no issues) and the same with
+`--platform win32`, `--platform linux` and `--platform darwin`, `levix doctor`. Citations: a bare `file.py:line` is under `src/levix/`; `tests/FILE.py` names a test file (module tests are
 `tests/modules/FILE.py`) and each identifier after it is one of its test functions.
 
 ## A. Installation and lightweight core

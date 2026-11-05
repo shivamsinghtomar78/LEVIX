@@ -1,6 +1,10 @@
 # LEVIX User Stories
 
-Written against the 0.4.0 tree as it stands, verified on Windows 11 with Python 3.12.10.
+Written against the 0.4.0 tree as it stands. The hand verification behind every line is
+Windows 11 with Python 3.12.10. GitHub Actions now executes the non-integration suite on
+Ubuntu and macOS too; its third run failed eight test functions that depend on the machine
+they run on, all eight are fixed in the tree, and the fourth run has to agree. So a story
+marked `Satisfied today` is still a Windows result until every column is green.
 `Satisfied today` names commands read in `src/levix`; `Verified by` names tests collected in
 `tests/`; `Not implemented` states plainly what is only partly met.
 Personas are the three in `PRD.md` §3: **DEV** (developer on their own machine),
@@ -8,9 +12,8 @@ Personas are the three in `PRD.md` §3: **DEV** (developer on their own machine)
 
 Deferred across several stories, and where that is recorded instead of invented: plugin
 `install`/`uninstall`/`publish` (`commands/plugins_cmd.py:1-8`, `PRD.md` §7), PyPI distribution,
-standalone binaries (`CHANGELOG.md` "Known gaps") and a CI matrix that has run once and is
-not green yet - its wheel job passes on Ubuntu, its suite has still never completed on a
-platform other than this laptop. POSIX behaviour is likewise deferred
+standalone binaries (`CHANGELOG.md` "Known gaps") and a CI matrix that is not green on
+every column yet. POSIX behaviour is likewise deferred
 (`CHANGELOG.md`). The open-work list is `docs/roadmap/CURRENT_STATUS.md`, which every
 deferred story points at rather than restating.
 
@@ -361,9 +364,11 @@ wrapping `levix` is safe.
   [SECTION]` prints `key=value` lines, and colour follows `NO_COLOR` / `LEVIX_NO_COLOR=1` /
   `TERM=dumb` / a non-TTY stdout (`terminal.detect`). History is best-effort: any failure inside
   `main._record` is swallowed and cannot change your code.
-- Not implemented: no column of the pipeline is **green** — `.github/workflows/ci.yml` ran on
-  2026-11-05, its wheel job passed on Ubuntu and every matrix column failed (four on a
-  Windows-only stat attribute in `mypy`, now fixed, two inside the suite on the Windows
-  runner); the checks are the commands in `CONTRIBUTING.md:42-50` and the
-  693-pass figure in `PRD.md` S4 was produced by hand on Windows 11. `levix update` also presumes a published `levix`
+- Not implemented: no column of the pipeline is **green** — `.github/workflows/ci.yml` ran
+  three times on 2026-11-05; its wheel job passed on Ubuntu each time, and the third run -
+  the first whose suite result could be trusted, see `docs/technology/PYTHON_PACKAGING.md` -
+  failed all six matrix columns on eight tests that depend on the machine they run on. Those
+  eight are fixed in the tree and a fourth run has to agree. The checks themselves are the
+  commands in `CONTRIBUTING.md:42-50`, and the 700-pass figure in `PRD.md` S4 was produced by
+  hand on Windows 11. `levix update` also presumes a published `levix`
   name on PyPI, which does not exist yet.

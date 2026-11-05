@@ -133,8 +133,12 @@ config root is a config error), playlist migration namespacing/idempotency,
 add-duplicate-ghost semantics, remove/clear/list, clear needing a terminal
 (exit 6) with files untouched, playlist play skipping broken entries, manifest
 contract, and subprocess proof that help does not import sounddevice/soundfile.
-The single `@pytest.mark.integration` test really plays 0.05 s of a tone on a
-real output device and **skips out loud** if PortAudio reports no usable device.
+Three tests carry `@pytest.mark.integration`, because they ask the machine rather
+than a fake: one really plays 0.05 s of a tone on a real output device, and two
+really list the devices PortAudio reports. Each **skips out loud** when the
+hardware is not there - CI run #3 found a Ubuntu runner with no PortAudio library
+and a Windows runner with PortAudio and no devices, which is a fact about the
+runner, not about this module.
 Not covered: decode paths for `.opus`, `.aiff`, `.aif`, `.au` (they are scan
 candidates but no fixture writes them), and true simultaneous-device behaviour.
 

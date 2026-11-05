@@ -7,8 +7,8 @@ All notable changes to LEVIX are documented here. The format follows
 ## Unreleased
 
 Everything below is work done after the `0.4.0` commit and is not yet released: the
-documentation set, the packaging fix, and a set of defects found by reading the docs
-against the code.
+documentation set, the packaging fix, a set of defects found by reading the docs against the
+code, and a second set found by GitHub Actions on platforms this laptop is not.
 
 ### Added
 
@@ -80,6 +80,21 @@ against the code.
   hold 45 tests where the collector reports 40 functions and 46 cases. `levix.sdk`'s export
   count moved with the code, from 15 names to 14. Every count in `docs/` now comes from
   `pytest --collect-only` and every claim names the file or test that shows it.
+- Two `music` device cases moved to `@pytest.mark.integration`:
+  `test_list_devices_reports_roles_and_defaults` and `test_devices_command_prints_a_table` ask
+  the machine which sound hardware it has, and CI's runners answer with either no PortAudio at
+  all (Ubuntu: `OSError: PortAudio library not found`) or PortAudio and no devices (Windows: an
+  empty listing). That is a fact about a headless runner, not a defect to be reported as one,
+  so the matrix no longer asks - `integration` is 10 cases where it was 8, and each of them now
+  skips out loud rather than failing.
+- `tests/test_router.py` reads help-page *text* with the escape codes stripped. Typer forces a
+  terminal whenever `GITHUB_ACTIONS` is set (`typer/rich_utils.py:77-82`), so a runner rendered
+  `Usage:` in bold and the style split the literal two cases were matching on. Colour is not
+  what forwarding is about; the text is, and markup escaping has its own test file.
+- `tests/modules/test_ai.py::test_explain_sends_only_the_capped_prefix` pins `COLUMNS=200`, the
+  same way the other width-sensitive cases in this suite do. At the 80 columns Rich assumes for
+  a captured stdout, CI's Ubuntu runner wrapped the cap notice after "showing" and the
+  assertion was reading half a sentence.
 
 ### Fixed
 
@@ -138,6 +153,31 @@ against the code.
   `getattr(os.lstat(path), "st_file_attributes", 0)`, the pattern `core.py:239` already uses
   for `st_birthtime`. `python -m mypy --platform win32|linux|darwin` is clean, which is how
   one machine checks what four runners reported.
+- `levix files delete` refused to remove a symbolic link that lived inside the wall when its
+  target lived outside it. The plan validated each target with `core.resolve()`, which
+  resolves *through* a link - the rule every other command needs, because reading, copying and
+  moving really do follow one. Removing a link writes nothing outside the wall and frees no
+  bytes from the target, so the refusal blocked exactly the safe case, and CI run #3 met it on
+  Ubuntu and on macOS. `plan_delete` now asks for `core.resolve(..., keep_link=True)`, used by
+  no other caller, and the decision is pinned by
+  `tests/modules/test_files.py::test_a_link_deleted_as_a_link_is_judged_at_its_own_place`,
+  which fakes "is a link" and "resolves outside" because the account running a suite may not be
+  allowed to create either.
+- `files preview` printed a Windows link's target as `\\?\C:\Users\...`. `os.readlink()`
+  hands back the DOS-device form the reparse record holds, so the table showed a path the user
+  cannot type back; `core.strip_device_prefix` now drops it, and turns `\\?\UNC\server\share`
+  into `\\server\share`. CI's Windows runner found this one - that account can create symlinks,
+  this laptop's cannot.
+- `levix hacker info` split the machine's own hostname in the middle. A table cell is only as
+  wide as its column, the host table's value column is 65 characters inside the 80 a captured
+  stdout implies, and the macOS runner's mDNS name is 68, so `overflow="fold"` broke the token
+  across two lines and the user read `iad20-...-C64BF1B94850.` newline `local`. The name is now
+  printed as a full-width line under that table, which wraps between words
+  (`tests/modules/test_hacker.py::test_a_hostname_longer_than_the_table_stays_in_one_piece`).
+- `.github/workflows/ci.yml`'s `Test suite` step reported its own success over a failing suite,
+  because `pytest | tee pytest.log` under Actions' default `bash -e` - no `pipefail` - hands
+  the step `tee`'s exit code. It redirects into the log, echoes it, and exits with pytest's
+  code; run #2's five green checks were the bug, not the tree.
 
 ### Verification
 
@@ -146,15 +186,19 @@ against the code.
   issues in 61 source files - `src/levix` plus the example plugin, which is what
   `[tool.mypy].files` declares and what CI now runs.
 - The suite, on this machine: `.venv/Scripts/python.exe -m pytest -o addopts="" -q` runs
-  **580 test functions in 17 files, collecting 698 parametrised cases** and reports
-  **693 passed, 5 skipped, 2 warnings in 157.55 s**, exit 0. The five skips are the symlink
+  **583 test functions in 17 files, collecting 705 parametrised cases** and reports
+  **700 passed, 5 skipped, 2 warnings in 124.42 s**, exit 0. The same tree without the ten
+  `integration` cases - which is what every CI column runs - is
+  **690 passed, 5 skipped, 10 deselected in 106.02 s**. The five skips are the symlink
   cases in `tests/modules/test_files.py` (this account cannot create symlinks; three more
   state that POSIX symlinks need no privilege there). The two warnings are a NumPy 2.5
   deprecation inside `sounddevice`, raised by the one real-device playback test.
 - Every `file:line` citation and every `::test_...` name in `docs/` was re-checked against
-  this tree with a throwaway script - 205 cited test names among the 580, 312 line ranges,
-  none missing or out of bounds. The script was not committed; `docs/roadmap/CURRENT_STATUS.md`
-  is the page that states which of the claims are machine-verified and which are not.
+  this tree with a throwaway script - 205 cited test names among the 580 it held at that
+  point, 312 line ranges, none missing or out of bounds. The script was not committed;
+  `docs/roadmap/CURRENT_STATUS.md` is the page that states which of the claims are
+  machine-verified and which are not. The tests added since then are named in the pages that
+  cite them and were checked against `pytest --collect-only`.
 - `levix doctor --json` on this machine answers exit 0 with verdict `degraded`:
   `ffmpeg`, `media_player` (`ffplay`), `audio_output`, `psutil`, `battery`, `keyring` and
   `platform` are `ok`, while `temperature` is `degraded` (this `psutil` has no
@@ -185,17 +229,25 @@ against the code.
 - `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
   exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
   is up to date when it could not ask.
-- **CI run #1 executed on 2026-11-05** (commit `fcbcb22`, the push that added the files).
-  `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the no-extras
-  install, the four exit-3 refusals and the wheel-content assertions are now proven on a
-  second platform. All four POSIX matrix columns stopped at `Types` on the one Windows-only
-  stat attribute, so there is still no POSIX **suite** result; both Windows columns passed
-  Lint, Format and Types and failed inside the suite, which is the first time this tree has
-  been red on a Windows machine that is not this laptop. Run logs need a signed-in account,
-  so the suite step now also writes the failing test names as annotations - run #2 is where
-  the POSIX suite results and those names arrive.
-- Linux and macOS remain unproven for the suite and for every module command: run #1 got as
-  far as `Types` there. Windows is proven on this laptop and red on the runner.
+- **CI ran three times on 2026-11-05**, each time on the commit that changed it. Run #1
+  (`fcbcb22`): `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the
+  no-extras install, the four exit-3 refusals and the wheel-content assertions are proven on
+  a second platform; all four POSIX matrix columns stopped at `Types` on the Windows-only
+  stat attribute, and both Windows columns passed Lint, Format and Types and failed inside
+  the suite. Run #2 (`726909c`) reported "5 successful and 2 failing" and both halves were
+  false: the suite step piped pytest through `tee`, Actions' default shell is `bash -e`
+  **without** `pipefail`, so Linux and macOS reported `tee`'s exit 0 over a failing suite,
+  while the Windows jobs died in pwsh on bash-only syntax before pytest started. The step now
+  declares `defaults.run.shell: bash`, redirects into `pytest.log` and echoes it, and turns
+  every `FAILED` line into a `::error::` annotation so a red column names itself without a
+  signed-in account. Run #3 (`5fdc644`) is the first result that means something: **all six
+  columns red, eight test functions between them**, every one of them dependent on the
+  machine it ran on. All eight are addressed in this commit (`### Fixed` below); the wheel
+  job passed on Ubuntu in every run.
+- Linux and macOS are still unproven for the suite. What run #3 established is that eight
+  cases were shaped by Windows, not that the rest of the tree is right on a runner - and the
+  fixes for those eight are only as good as run #4, because this laptop has PortAudio and
+  real devices, cannot create symlinks, and is not macOS.
 
 ## 0.4.0 - initial official modules
 

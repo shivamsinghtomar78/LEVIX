@@ -669,6 +669,25 @@ def test_info_prints_this_machine_and_exits_cleanly(run_cli, capsys):
     assert "Traceback" not in text
 
 
+#: What CI's macOS runner calls itself: 68 characters, wider than the value column the
+#: host table can afford inside the 80 columns a captured stdout implies.
+LONG_HOSTNAME = "iad20-gt1018-b2808a49-24f5-4b35-a580-e30f8dc8023e-C64BF1B94850.local"
+
+
+def test_a_hostname_longer_than_the_table_stays_in_one_piece(run_cli, capsys, monkeypatch):
+    """The machine's name is the one value here a user copies out of the terminal.
+
+    `test_info_prints_this_machine_and_exits_cleanly` prints whatever this box is called,
+    and a short name never exposes the layout. This is the same assertion against the
+    width that split the runner's name mid-token in CI run #3.
+    """
+    import socket
+
+    monkeypatch.setattr(socket, "gethostname", lambda: LONG_HOSTNAME)
+    assert run_cli("hacker", "info") == 0
+    assert LONG_HOSTNAME in capsys.readouterr().out
+
+
 def _view(**overrides: object) -> core.NetworkView:
     """A NetworkView with nothing collected, so one field can be rendered on its own."""
     base: dict[str, object] = {

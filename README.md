@@ -106,11 +106,12 @@ plugin SDK, security model, and the phase roadmap.
 
 Version 0.4.0 delivers the core engine, the dashboard and all seven official modules. What
 is *not* done is stated rather than implied: every number in these pages comes from one
-Windows 11 machine, the CI matrix that would prove Linux and macOS has run once and no
-column of it is green yet, and the release workflow that would put `levix` on PyPI has
-never run at all. Plugin *install* and standalone binaries remain open.
+Windows 11 machine, the CI matrix that would prove Linux and macOS has run three times with
+no column green yet (the eight machine-dependent failures its third run found are fixed in
+the tree and waiting on the fourth), and the release workflow that would put `levix` on PyPI
+has never run at all. Plugin *install* and standalone binaries remain open.
 [docs/roadmap/CURRENT_STATUS.md](docs/roadmap/CURRENT_STATUS.md)
-lists what is proven, how it was proven, and the twelve things no reader should quote as
+lists what is proven, how it was proven, and the thirteen things no reader should quote as
 verified.
 
 ## License

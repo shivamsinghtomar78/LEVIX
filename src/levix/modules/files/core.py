@@ -101,16 +101,32 @@ def is_within(candidate: Path, parent: Path) -> bool:
     return True
 
 
-def resolve(raw: str | os.PathLike[str], *, root: Path | None = None, label: str = "path") -> Path:
+def resolve(
+    raw: str | os.PathLike[str],
+    *,
+    root: Path | None = None,
+    label: str = "path",
+    keep_link: bool = False,
+) -> Path:
     """Resolve `raw` (against the current directory) and enforce the wall.
 
     `Path.resolve()` collapses `..` and follows symlinks, so the comparison is made on
     the real location rather than on what the user happened to type.
+
+    `keep_link` is for the one operation that never follows a link: removing one deletes
+    the link record, frees no bytes from the target and cannot write outside anything.
+    Judging it by its target refused a safe, intended removal (CI run #3, Ubuntu and
+    macOS), so the wall is applied to the link's own location. Every other caller leaves
+    this off, because reading, copying or moving does follow the link and must not be
+    able to reach outside the wall with it.
     """
     wall = None if root is None else root.resolve(strict=False)
     candidate = to_path(raw)
     try:
-        resolved = candidate.resolve(strict=False)
+        if keep_link and os.path.islink(candidate):
+            resolved = candidate.parent.resolve(strict=False) / candidate.name
+        else:
+            resolved = candidate.resolve(strict=False)
     except OSError as exc:  # pragma: no cover - unreachable drives, IO errors
         raise FilesError(f"cannot resolve {printable(candidate)}: {exc.strerror or exc}") from exc
     if wall is not None and not is_within(resolved, wall):
@@ -211,6 +227,21 @@ class EntryStat:
         return format_time(self.created) + (" (birth)" if self.created_is_birth else " (ctime)")
 
 
+def strip_device_prefix(target: str) -> str:
+    """Drop the DOS-device form Windows stores inside an absolute link's reparse data.
+
+    `os.readlink()` returns what the record holds, and for an absolute link on Windows
+    that is `\\\\?\\C:\\Users\\...` - or `\\\\?\\UNC\\server\\share` for a network target,
+    or the native `\\??\\...` spelling. The prefix is not part of the file name: shown in
+    a table it is noise, and as text it is a path the user could not type back.
+    """
+    if target.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + target[len("\\\\?\\UNC\\") :]
+    if target.startswith(("\\\\?\\", "\\??\\")):
+        return target[4:]
+    return target
+
+
 def stat_entry(path: Path) -> EntryStat:
     """`lstat` (never follow a link); an unreadable entry becomes an honest `exists=False`."""
     try:
@@ -235,7 +266,7 @@ def stat_entry(path: Path) -> EntryStat:
     target = ""
     if is_link:
         with suppress(OSError):
-            target = os.readlink(path)
+            target = strip_device_prefix(os.readlink(path))
     birth = getattr(info, "st_birthtime", None)
     return EntryStat(
         path=path,
@@ -919,7 +950,8 @@ def plan_delete(raw_paths: Sequence[str], *, root: Path, recursive: bool) -> Del
     covered: list[Path] = []
     for raw in raw_paths:
         path = require_exists(
-            resolve(raw, root=wall, label="deletion target"), label="deletion target"
+            resolve(raw, root=wall, label="deletion target", keep_link=True),
+            label="deletion target",
         )
         if any(other != path and is_within(path, other) for other in roots):
             covered.append(path)
