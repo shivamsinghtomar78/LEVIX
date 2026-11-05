@@ -60,7 +60,7 @@ what is enforced.
 | NFR-5.3 | Credentials never enter logs. Redaction is a `logging.Filter` attached to the logger, so a module that logs a formatted exception cannot bypass it: `Authorization: bearer …`, `sk-…`, `ghp_`/`gho_`/`github_pat_…` and any `*api[_-]?key\|token\|secret\|password*=…` pair are replaced. | `src/levix/logging_setup.py` (`RedactFilter`, `_PATTERNS`) | `tests/test_logging.py` — six parametrised shapes through `redact`, one through a real `LogRecord`, one that writes a real rotating log file and greps it, one that adds an unfiltered handler to prove the logger-level filter. **Residual:** patterns, not a schema — a credential in a shape they do not name (a JWT, say) is still logged; see Known gaps |
 | NFR-5.4 | Nothing is logged to stdout, which would corrupt Rich and Textual output; only a stderr WARNING handler exists when no file handler could be opened. | `logging_setup.setup` | `tests/test_logging.py::test_the_only_console_handler_writes_to_stderr` (the fallback handler's stream is `sys.stderr` and its level is `WARNING`) |
 | NFR-5.5 | Secrets are never read from or written to configuration files; `config list`/`show` mask secret-shaped keys and `config set` refuses them. | `secrets.py` docstring, `config.is_secret_key`, `commands/config_cmd.py` (`_MASK`) | `tests/test_config.py`; observed masking of `ai.max_tokens` |
-| NFR-5.6 | The plaintext secret fallback is described as what it is — owner-only access control, not encryption — and `doctor` reports it as `degraded`. `LEVIX_DISABLE_FILE_SECRETS=1` removes it entirely. | `secrets.backend`, `doctor.environment` | `tests/modules/test_ai.py::test_key_from_the_owner_only_file_when_no_keyring` |
+| NFR-5.6 | The plaintext secret fallback is described as what it is — owner-only access control, not encryption — and `doctor` reports it as `degraded`. `LEVIX_DISABLE_FILE_SECRETS=1` removes it entirely. | `secrets.backend`, `doctor.environment` | `tests/modules/test_ai.py::test_key_from_the_owner_only_file_when_no_keyring`, and the "owner-only" half itself: `tests/test_secrets.py::test_the_acl_holds_one_explicit_grant_and_no_inherited_read` (real `icacls`, asserted here) plus the three POSIX mode cases, which `skip` on Windows and have not run on a POSIX CI column yet |
 | NFR-5.7 | No request ever asks a media site for cookies, credentials or account state, and there is no DRM or download-protection bypass; `file://` URLs stay off until explicitly allowed. | `modules/tube/core.py` | `tests/modules/test_tube.py::test_no_request_ever_asks_for_credentials_or_cookies`, `::test_file_urls_stay_disabled_until_they_are_explicitly_allowed` |
 | NFR-5.8 | LEVIX never modifies its own installation; the one default network call is to the PyPI JSON API and is disclosed in the output. | `commands/update_cmd.py` | unverified (needs network) |
 | NFR-5.9 | A key is never sent to a host that is not the configured provider; remote hosts without a key are refused, loopback and Ollama are exempt. | `ai/core.py::resolve_key` | `tests/modules/test_ai.py::test_resolve_key_refuses_a_remote_host_without_a_key` |
@@ -127,7 +127,7 @@ what is enforced.
 | ID | Requirement | Delivered by | Evidence |
 | --- | --- | --- | --- |
 | NFR-11.1 | No test touches a real user profile: the `levix_home` fixture deletes every `LEVIX_*` variable, sets `LEVIX_HOME`, disables file logging and forces `NO_COLOR=1`. | `tests/conftest.py` | file logging is disabled because an open handle makes Windows fail to delete the temp directory |
-| NFR-11.2 | Tests run the real entry point so exit codes and history are exercised, not just command bodies. | `tests/conftest.py::run_cli` → `levix.main.main(list(argv))` | `711 passed, 5 skipped` suite (the skips are all symlink cases) |
+| NFR-11.2 | Tests run the real entry point so exit codes and history are exercised, not just command bodies. | `tests/conftest.py::run_cli` → `levix.main.main(list(argv))` | `712 passed, 8 skipped` suite (five skips are symlink cases, three are the POSIX-only file-mode cases in `tests/test_secrets.py`) |
 | NFR-11.3 | The registry is injectable, and reset before and after every test. | `registry.use`, `conftest._reset_registry` (autouse) | `tests/test_registry.py::test_active_registry_is_injectable_and_resettable` |
 | NFR-11.4 | The dashboard is tested headless with Textual's Pilot (`run_test(headless=True, size=(100, 30))`) because the suite runs where there is no terminal. | `tests/test_dashboard.py` header, `app.run_test` | 15 dashboard tests |
 | NFR-11.5 | Markers `integration` and `slow` are declared and `--strict-markers` is on; 10 tests are marked `integration`. | `pyproject.toml` `[tool.pytest.ini_options]` | no test uses `slow`. Three of the ten ask the machine which sound devices it has, which is what CI's headless runners cannot answer |
@@ -139,11 +139,15 @@ what is enforced.
   other half: a credential in a shape the four patterns do not name — a JWT in a provider's
   error body, an opaque `X-Auth: …` header — is logged verbatim, because nothing here parses
   the message.
-- **POSIX behaviours are still unasserted.** CI run #4 (`5b047ad`) is green on Ubuntu and
+- **POSIX behaviours are still unobserved.** CI run #4 (`5b047ad`) is green on Ubuntu and
   macOS, so the POSIX branches of the code the suite reaches do execute there — including the
-  `chmod` in `secrets._harden`. What no test does is stat the resulting mode, run the OS's own
-  network tools and parse their real output (`ip addr show`, `ifconfig`, `resolv.conf`,
-  `nsswitch.conf`, `route -n`), or exercise the POSIX keyring. The parsers are fed captured
+  `chmod` in `secrets._harden`. `tests/test_secrets.py` now closes the mode gap in code — it
+  stats `secrets.json`, refuses the `chmod` and overwrites a `0644` store — but those three
+  cases `skip` on Windows and no CI run has carried them onto a POSIX column, so the POSIX mode
+  is asserted-in-code and not yet observed on a POSIX runner. What still has no test at all is
+  running the OS's own
+  network tools and parsing their real output (`ip addr show`, `ifconfig`, `resolv.conf`,
+  `nsswitch.conf`, `route -n`), or exercising the POSIX keyring. The parsers are fed captured
   POSIX text; that is a test of the parser, not of the platform.
 - **Coverage is configured but no threshold is enforced** (`[tool.coverage.run]` with
   `branch = true`; no `--cov` in `addopts`).

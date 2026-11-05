@@ -23,8 +23,12 @@ milliseconds and tens of megabytes for a command that prints text and exits.
 manifest whose body is a forward:
 
 ```python
-app.command(command_name, help=manifest.summary, add_help_option=False,
-           context_settings={"ignore_unknown_options": True, "allow_extra_args": True})(dispatch)
+app.command(
+    command_name,
+    help=manifest.summary,
+    add_help_option=False,
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)(dispatch)
 ```
 
 and `_forward` hands the untouched argv to the module's own click command, built at that

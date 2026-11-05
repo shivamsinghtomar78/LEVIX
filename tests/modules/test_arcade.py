@@ -596,9 +596,19 @@ def test_the_snake_screen_steers_on_a_key_redraws_and_settles():
         assert detail == snake_rules.START_LENGTH + score // snake_rules.FOOD_POINTS
         assert score >= 0
 
+        # A restarted snake dies on its sixth tick, so with the 20 ms clock this case has
+        # been driving, `alive` after `r` measures how long the message pump took. Pin the
+        # new round's tick beyond any plausible pause and assert the state the binding wrote.
+        app.forced_interval = 60.0
         await pilot.press("r")
         await pilot.pause()
-        assert app.state.alive and app.state.direction == "right", "r starts a new round"
+        state = app.state
+        assert state.alive, "r starts a new round"
+        assert (state.direction, state.ticks, state.score) == ("right", 0, 0)
+        assert state.body[0] == (app.cols // 2, app.rows // 2), "the head is back at the centre"
+        assert len(state.body) == snake_rules.START_LENGTH
+        assert "GAME OVER" not in board(), "the round the player sees is the new one"
+        assert len(stored) == 1, "a new round does not store the last one twice"
         await pilot.press("q")
         await pilot.pause()
 

@@ -27,7 +27,7 @@ entry point, and are **never read from what the plugin claims**:
 
 ```python
 provider = entry_point.dist.name if entry_point.dist else ""
-origin = _origin_for(provider, manifest.name)   # OFFICIAL_DISTRIBUTION == "levix"
+origin = _origin_for(provider, manifest.name)  # OFFICIAL_DISTRIBUTION == "levix"
 ```
 
 `OFFICIAL_NAMES` (`monitor`, `hacker`, `files`, `tube`, `game`, `music`, `ai`) is a second

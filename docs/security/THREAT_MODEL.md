@@ -53,8 +53,8 @@ in a docstring stating that nothing here uses it. `subprocess.run` appears six t
 | `tube/core.py:179` | media player | `[player, url]` from `player_command` | player found only via `shutil.which`, "Never guesses a location it did not find on PATH"; `OSError` → `ExternalToolError` (7) |
 | `hacker/core.py:291` | `ipconfig`, `route`, `ip`, `ifconfig` | `shutil.which(command[0])` then `[path, *rest]` | executes the resolved path, "so the two searches cannot disagree"; `timeout=8.0` default; `capture_output=True`; output decoded through a candidate chain that never raises |
 | `ai/core.py:424` | a model-proposed program | `[resolved, *argv[1:]]` with `argv` from `shlex.split` | `shutil.which` first, `timeout`, `check=False`; refusal of shell metacharacters before this point |
-| `secrets.py:144` | `icacls` | fixed argv `/inheritance:r /grant:r <user>:F` | `# noqa: S603 - fixed argv, no shell`, `timeout=10`, `capture_output=True` |
-| `commands/config_cmd.py:163` | `$EDITOR` / notepad / vi | `[editor, str(config_file)]` | `check=False`, `# noqa: S603`; the editor is the user's own choice, so this is a deliberate trust of the environment |
+| `secrets.py:150` | `icacls` | fixed argv `/inheritance:r /grant:r <user>:F` | `check=False`, `timeout=10`, `capture_output=True`; no `noqa` is needed because ruff ignores `S603` tree-wide (`pyproject.toml:108`) |
+| `commands/config_cmd.py:181` | `$EDITOR` / notepad / vi | `[editor, str(config_file)]` | `check=False`, `OSError` turned into a `ConfigError` that names the editor; the editor is the user's own choice, so this is a deliberate trust of the environment |
 
 | Consequence | Detail |
 |-------------|--------|
@@ -121,7 +121,7 @@ in a docstring stating that nothing here uses it. `subprocess.run` appears six t
 | Never stored in configuration | no `SCHEMA` key holds a credential; `config set` refuses secret-shaped keys; `Config.load` never reads the secrets store |
 | Resolution order | `LEVIX_AI_API_KEY` → OS keyring (`service="levix"`, `user="AI_API_KEY"`) → `Paths.secrets_file`; `get_secret` returns `(value, source)` |
 | Honest description of the fallback | `backend()` calls it "plaintext file at … with owner-only permissions (access control, not encryption)", and `doctor` marks it `DEGRADED` rather than pretending the key is encrypted at rest |
-| File hardening | `_harden`: `chmod 0600` plus, on Windows, `icacls /inheritance:r /grant:r <user>:F`; failures are swallowed because the file is already written |
+| File hardening | `_write_file` creates `secrets.json` at `0600` (`secrets.py:128-139`), so the mode never depends on a later call succeeding; `_harden` then `chmod`s it again and, on Windows, runs `icacls /inheritance:r /grant:r <user>:F` (`secrets.py:142-163`). `chmod` failures are swallowed because a key already on disk must not crash the command that stored it - and `tests/test_secrets.py::test_a_chmod_that_fails_leaves_no_more_access_than_the_open_gave` asserts the file is still owner-only when it is refused |
 | Opt out of plaintext | `LEVIX_DISABLE_FILE_SECRETS=1` makes `set_secret` raise a `RuntimeError` telling the user to set the environment variable; `backend()` then reports `("none", "no keyring installed and file store disabled")` |
 | Never printed | `levix ai check` prints the key *source*, not the value; `config show`/`list` mask secret-shaped keys; `context.secret` logs `"secret %s resolved from %s"` with the name and the source, never the value |
 | Never a command-line argument | `levix ai key set` reads the key with `typer.prompt(..., hide_input=True)`, so it stays out of shell history, out of the process list and out of any crash report that carries argv; with no terminal to prompt in it raises `ConfigError` naming the environment variable rather than accepting the key from a pipe |
@@ -154,7 +154,7 @@ in a docstring stating that nothing here uses it. `subprocess.run` appears six t
 |---|------|-------------------------|--------------------|
 | 1 | **Untrusted third-party plugins** | entry points in LEVIX's environment are imported and executed with no sandbox, no allow-list, no signature and no capability enforcement. A normal subprocess is **not** a sandbox either: `spawn.run` gives the child the same user, the same environment, the same filesystem and the same interpreter, so running a plugin "in a child process" would change only its TTY, not its privileges. The only real isolation would be an OS-level boundary (separate user, container, Job Object) or a capability broker, and neither exists in this tree | anyone who can `pip install` into LEVIX's environment can run code as the user whenever the user runs `levix` |
 | 2 | **Config file and database permissions** | `Paths.ensure()` creates directories with default umask/ACLs; `config.toml` is written by `tomlkit` with no hardening, and `levix.db` inherits the data directory's permissions. Only `secrets.json` is chmod-ed. On POSIX a shared `~/.local/share/levix` with permissive parents exposes provider URLs, models, history and high scores | another user on a shared machine can read the user's configuration and command history |
-| 3 | **The plaintext secret fallback** | it is access-controlled plaintext, explicitly not encryption; on Windows the ACL reset is best-effort and its failure is swallowed | if the keyring extra is absent, the key sits in a JSON file whose hardening can silently fail |
+| 3 | **The plaintext secret fallback** | it is access-controlled plaintext, explicitly not encryption. A `chmod` failure no longer exposes the key, because the file is created at `0600` and `tests/test_secrets.py` asserts that with the `chmod` refused; on Windows the `icacls` reset is still best-effort, and its result is asserted only by a case that skips off Windows | if the keyring extra is absent, the key sits in a JSON file that is readable only by its owner - by ACL, not by cipher. Anyone who is the owner, or who already has root, has the key |
 | 4 | **Model-proposed commands** | LEVIX refuses shell syntax and requires a typed `RUN`, but it does not classify the command: `rm -rf` inside an argument list is still `rm -rf` with the user's own privileges. The protection is the human reading the line | a user who types `RUN` without reading authorises the deletion |
 | 5 | **Prompt and file content sent to a provider** | `ai explain` sends up to 32 000 bytes per file to whatever `ai.base_url` points at. The cap and the disclosure are mitigations; the egress itself is the feature | a misconfigured `base_url` sends private files to an unexpected server; `levix ai check` exists to make this visible |
 | 6 | **`$EDITOR` trust** | `config edit` executes whatever `EDITOR`/`VISUAL` names, resolving to notepad/vi only when neither is set | an attacker who controls the environment controls execution — but they already control the user's session |
@@ -183,7 +183,10 @@ in a docstring stating that nothing here uses it. `subprocess.run` appears six t
    a project-wide guard would be cheap and does not exist.
 5. **Asserted on Windows only.** CI run #4 (`5b047ad`) executes the tree on Ubuntu and macOS
    and nothing there fails, so the POSIX *branches* are no longer unread. What still has no
-   assertion: nobody stats the mode of `secrets.json` after `secrets._harden`'s `chmod`, every
+   observation behind it: `tests/test_secrets.py` now stats the mode of `secrets.json`, but its
+   three POSIX cases skip on this machine and no run has yet carried them onto the Linux and
+   macOS columns, so the mode is asserted-in-code and not yet asserted-on-a-POSIX-runner (the
+   Windows ACL case does run here, and reads the real `icacls` output); every
    keyring test replaces `secrets._keyring` with a fake (`tests/modules/test_ai.py:568-599`,
    `:922-990`) so no OS keyring has ever been asked on any platform, and the suite runs under
    `LEVIX_HOME`, so `paths`' real POSIX layout is resolved with an override rather than the

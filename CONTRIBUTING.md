@@ -43,9 +43,9 @@ pre-commit install
 ruff check src tests plugin-examples
 ruff format src tests plugin-examples
 mypy                                # [tool.mypy].files already includes plugin-examples
-pytest                          # all 716 cases; no network, no real TTY
+pytest                          # all 720 cases; no network, no real TTY
 pytest -m integration           # only the 10 that touch a device or a real OS tool
-pytest -m "not integration"     # the CI-safe subset (706 cases)
+pytest -m "not integration"     # the CI-safe subset (710 cases)
 levix doctor
 ```
 
@@ -62,13 +62,21 @@ run takes ~1.6 minutes here (`docs/roadmap/CURRENT_STATUS.md` §Test suite as la
 Run one pytest process at a time on a small machine, and never pipe the suite through `tail` -
 it discards the traceback of the one failure you will want to read. `pytest-xdist` is not a
 dependency, so parallelism here means separate processes, and the failures this tree has
-observed are one arcade screen case and one unnamed test, each seen once while several
-processes overlapped on an 8 GB laptop. Seventeen later attempts - some with more concurrency
-than the failures had - all passed, so contention is a correlation from two lost tracebacks and
-not a proven cause. Note that the arcade case is `integration`-marked, so CI never runs it: a
-green matrix neither catches it nor clears it. If you write a case that drives a Textual timer,
-give the loop a budget in app messages rather than `pilot.pause` iterations, or mark it
-`integration` and say so. Keeping the suite to one process at a time is cheap, and it is what
+observed are one arcade screen case, twice while several processes overlapped on an 8 GB laptop
+and once in a quiet sequential run. That last one is the useful datum: it falsified contention as
+the *cause*. The case asserted `app.state.alive` right after pressing `r`, and the app had just
+re-armed a real `set_interval` timer at the 20 ms the test pinned, so the snake crossed the
+12-column board and died inside the window `pilot.pause()` took to return - the reported
+`ticks=6` was exactly the arithmetic, not bad luck. Concurrency changes how long that window is;
+it did not create it. The fix was to take the clock out of the assertion rather than widen its
+budget: pin the tick the restarted round will arm at something the test cannot outrun
+(`app.forced_interval = 60.0`) and assert the state the binding writes. As a rule, if a case
+drives a Textual timer, do not ask it for a state that a few ticks can undo - either stop or
+slow the timer first, or assert the pure rules (`ticks`, `score`, `direction`, body length).
+Waiting *for* the clock, as the polls above that assertion do, is safe in the other direction:
+extra elapsed time costs iterations, never the verdict. Note that the arcade screen cases are
+`integration`-marked, so CI never runs any of them: a green matrix neither catches that class of
+defect nor clears it. Keeping the suite to one process at a time is still cheap, and it is what
 keeps the timings in `docs/roadmap/CURRENT_STATUS.md` §Test suite as last run comparable.
 
 Every command needs: help text, argument validation, a predictable exit code, an entry

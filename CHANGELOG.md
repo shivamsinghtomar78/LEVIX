@@ -35,6 +35,14 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   console handler writes to stderr at `WARNING`. It closes gap 6 of
   `docs/roadmap/CURRENT_STATUS.md`; what it does not claim is coverage of a credential in a
   shape the four patterns do not name.
+- `tests/test_secrets.py`: 4 test functions that stat the key store instead of reading the code
+  that protects it. On POSIX the file must be mode `0600` after a real `set_secret`, must stay
+  owner-only when a faked `Path.chmod` refuses the call (the case asserts the chmod was
+  attempted, so a Python that moved the method cannot silently turn it into a no-op), and must
+  come back to `0600` when an existing `0644` store is overwritten. On Windows it runs the real
+  `icacls` and requires one explicit grant, to this user, with nothing inherited - because
+  `st_mode` there reports `0o666` for every ordinary file and proves nothing. The three POSIX
+  cases `skip` on Windows, so they are the first thing the next CI run has to answer.
 - `levix ai key set` / `levix ai key clear`: the write path for the provider credential,
   through `LevixContext.store_secret()` / `forget_secret()` to `secrets.set_secret()` /
   `delete_secret()`. The key is prompted with echoing off, so it never enters argv, the
@@ -187,43 +195,70 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   because `pytest | tee pytest.log` under Actions' default `bash -e` - no `pipefail` - hands
   the step `tee`'s exit code. It redirects into the log, echoes it, and exits with pytest's
   code; run #2's five green checks were the bug, not the tree.
+- `secrets._write_file` wrote `secrets.json` with `Path.write_text`, which creates at the
+  default mode (`0666` minus umask, so world-readable on a typical Linux umask), and only then
+  called `_harden`. `_harden`'s `chmod` is wrapped in `suppress(OSError)` on purpose - a key
+  already on disk must not crash the command that stored it - which meant the one call standing
+  between a readable file and an owner-only one was the call allowed to fail silently. Writing
+  the permission test is what found it: the case that refuses the `chmod` would have caught a
+  `0644` store on the first Linux column. `_write_file` now opens with `O_CREAT` at
+  `stat.S_IRUSR | stat.S_IWUSR` (`src/levix/secrets.py:128-139`), so the mode is right at
+  creation and the later `chmod` is a correction for the overwrite case rather than the only
+  thing protecting the key; `0600` asks for no group or other bit, so umask has nothing left to
+  remove.
+- `tests/modules/test_arcade.py::test_the_snake_screen_steers_on_a_key_redraws_and_settles`
+  asserted something the scheduler decided. After the round ended it pressed `r`, paused once,
+  and required `app.state.alive` - but `restart_game` re-arms a real `set_interval` timer
+  (`src/levix/modules/arcade/screens.py:106-117`) at the `interval=0.02` the case pins, and
+  `snake_rules.new_game` starts the head at `width // 2` heading right
+  (`src/levix/modules/arcade/snake.py:88-90`), so on that 12-column board the new snake dies on
+  its sixth tick, about 120 ms later. Whether `alive` was still true measured how long the message
+  pump took, which is why it failed twice under contention and once in a quiet run. The case now
+  pins the *new* round's tick at 60 s through `app.forced_interval` - the lever the app documents
+  for tests - and asserts what the `r` binding is actually responsible for: `(direction, ticks,
+  score)` back at `("right", 0, 0)`, head at the centre, body at `START_LENGTH`, no `GAME OVER`
+  on the board, and still exactly one stored row. The three polls above it keep their budgets
+  because they wait for the snake to die, where elapsed time costs iterations rather than the
+  verdict. Fifteen consecutive quiet repeats pass; `pytest -m integration` is green at 10.
+- `ruff format --check .` was red on two ADRs, because ruff 0.17 formats fenced Python inside
+  Markdown and `docs/decisions/ADR-0002…` and `ADR-0003…` each held a snippet written by hand. CI
+  only checks `src tests plugin-examples`, so the column never saw it; both snippets are now
+  re-wrapped in place, prose untouched, which makes the wider check clean at 123 files.
 
 ### Verification
 
 - `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests
-  plugin-examples` exit 0 (81 files already formatted); bare `python -m mypy` exits 0 with no
+  plugin-examples` exit 0 (82 files already formatted, and the wider `.` scope is clean at 123
+  since the two ADR snippets were re-wrapped); bare `python -m mypy` exits 0 with no
   issues in 61 source files - `src/levix` plus the example plugin, which is what
   `[tool.mypy].files` declares and what CI now runs - and `--platform win32`, `--platform linux`
-  and `--platform darwin` each report the same 61 clean.
+  and `--platform darwin` each report the same 61 clean, re-run against this tree because
+  `secrets._write_file` is in it.
 - The suite, on this machine: `.venv/Scripts/python.exe -m pytest -o addopts="" -q` runs
-  **589 test functions in 18 files, collecting 716 parametrised cases** and reports
-  **711 passed, 5 skipped, 2 warnings in 97.06 s**, exit 0. The same tree without the ten
+  **593 test functions in 19 files, collecting 720 parametrised cases** and reports
+  **712 passed, 8 skipped, 2 warnings in 96.15 s**, exit 0. The same tree without the ten
   `integration` cases - which is what every CI column runs - is
-  **701 passed, 5 skipped, 10 deselected in 103.69 s**, and those ten alone are
-  **10 passed, 706 deselected in 10.36 s**. The five skips are the symlink
-  cases in `tests/modules/test_files.py` (this account cannot create symlinks; three more
-  state that POSIX symlinks need no privilege there). The two warnings are a NumPy 2.5
-  deprecation inside `sounddevice`, raised by the one real-device playback test. All three
-  were run with one pytest process at a time; see `docs/roadmap/CURRENT_STATUS.md`
-  §One observed flake for why that is said out loud.
-- Two runs failed while several pytest processes shared this 8 GB machine, and both command
-  lines ended in `| tail`, so neither traceback survived. One names itself:
-  `tests/modules/test_arcade.py::test_the_snake_screen_steers_on_a_key_redraws_and_settles`
-  in a `-m integration` run overlapping a full-suite run. The other is a full-suite run
-  overlapping two integration runs in which one test failed and its name was lost - it is not
-  established to be the arcade case. Seventeen later attempts, all with `-rf --tb=line`, came
-  back green: three concurrent full-suite runs, six concurrent `-m integration` runs, two more
-  integration runs alongside a full suite, five repeats of the six arcade-screen cases while a
-  full suite ran beside them, and one standalone full suite - some carrying more concurrency
-  than either failure had. Nothing was changed, because no traceback means no named assertion
-  to aim at. What the code does say: that case is `@pytest.mark.integration`
-  (`tests/modules/test_arcade.py:559`), so no CI column runs it and the green matrix neither
-  catches nor excuses it, and it advances a real `set_interval` timer
-  (`src/levix/modules/arcade/screens.py:117`) with a bounded number of `pilot.pause(0.01)`
-  calls - a wall-clock budget the scheduler decides, which is the machine-dependence
-  `CONTRIBUTING.md` already tells authors to avoid. `_tick` is synchronous end to end and
-  `snake.py:228` derives `GAME OVER` from `state.alive`, so the two races first suspected are
-  not it.
+  **702 passed, 8 skipped, 10 deselected in 88.10 s**, and those ten alone are
+  **10 passed, 710 deselected, 2 warnings in 9.27 s**. Eight skips, and each names its reason:
+  five symlink cases in `tests/modules/test_files.py` (this account cannot create symlinks; three
+  more state that POSIX symlinks need no privilege there) and the three POSIX-only permission
+  cases in `tests/test_secrets.py`, which is precisely what the next CI run is for. The two
+  warnings are a NumPy 2.5 deprecation inside `sounddevice`, raised by the one real-device
+  playback test. All three were run with one pytest process at a time; see
+  `docs/roadmap/CURRENT_STATUS.md` §The flake, explained and closed for why that is said out loud.
+- The flake that sentence refers to is now closed, and the contention story told here earlier was
+  wrong in the way that matters. Two runs had failed with `| tail` on the command line, so no
+  traceback survived; seventeen deliberate reproductions came back green, and those green runs
+  were read as evidence that only concurrency could do it. The case then failed in a sequential
+  `-m integration` run with the pipe removed, and the traceback named the cause: the assertion
+  after `r` measured elapsed real time, and on a 12-column board at `interval=0.02` the restarted
+  snake reaches the wall on its sixth tick - the reported `ticks=6` is the predicted number, not a
+  coincidence. So concurrency could raise the odds but was never the mechanism, and the fix is in
+  `test_arcade.py`, not in the scheduler: the case pins the new round's tick at 60 s and asserts
+  the state `restart_game` writes. Fifteen consecutive quiet repeats of that single case pass, and
+  `-m integration` is green at 10 passed. The honest residue: the arcade screen cases are
+  `@pytest.mark.integration`, so no CI column runs any of them - the matrix neither caught this
+  nor will catch its return.
 - Every `file:line` citation and every `::test_...` name in `docs/` was re-checked against
   this tree with a throwaway script - 205 cited test names among the 580 it held at that
   point, 312 line ranges, none missing or out of bounds. The script was not committed;
@@ -260,7 +295,7 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
   exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
   is up to date when it could not ask.
-- **CI ran four times on 2026-11-05**, each time on the commit that changed it. Run #1
+- **CI ran five times on 2026-11-05**, each time on the commit that changed it. Run #1
   (`fcbcb22`): `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the
   no-extras install, the four exit-3 refusals and the wheel-content assertions are proven on
   a second platform; all four POSIX matrix columns stopped at `Types` on the Windows-only
@@ -281,14 +316,24 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   annotations are GitHub's own Node.js-20 deprecation warning and runner notices). That
   confirms all eight fixes on the platforms that found them, including the two POSIX symlink
   cases this laptop can only fake. `docs/roadmap/CURRENT_STATUS.md` §Defects found by CI
-  records each one with the column that closed it.
-- What run #4 does **not** prove: each column runs `pytest -m "not integration"`, so the ten
+  records each one with the column that closed it. **Run #5 (`75daed2`, run id `42074244730`)
+  is green the same way** - all seven jobs `success`, the four steps individually `success` on
+  all six columns, annotations again only GitHub's Node.js-20 warning and runner notices - and
+  it is the run that matters more, because it is the first to carry `tests/test_logging.py`.
+  `::test_a_key_never_reaches_the_log_file` calls `setup()` for real, lets `RotatingFileHandler`
+  open `levix.log`, writes three secret-shaped lines and reads the bytes back off disk; it is
+  the only case in the CI set that opens a log file, and it passed on Ubuntu and macOS as well
+  as Windows.
+- What runs #4 and #5 do **not** prove: each column runs `pytest -m "not integration"`, so the ten
   device and OS-tool cases still have only ever executed on Windows 11 here; no command has
   been run by hand on Linux or macOS; and a green column says a branch was reached without
-  failing, not that the behaviour was asserted. The POSIX items in
-  `docs/roadmap/CURRENT_STATUS.md` §What is not verified - the *effect* of the secrets-file
-  `chmod`, real `ip addr show` / `ifconfig` output, a real POSIX keyring, the platformdirs
-  layout under a real `$XDG_*` - have no test at all, on any platform. `release.yml` has
+  failing, not that the behaviour was asserted. The remaining POSIX items in
+  `docs/roadmap/CURRENT_STATUS.md` §What is not verified - real `ip addr show` / `ifconfig`
+  output, a real POSIX keyring, the platformdirs
+  layout under a real `$XDG_*` - have no test at all, on any platform. The *effect* of the
+  secrets-file permissions is no longer one of them in code: `tests/test_secrets.py` stats the
+  file, but its three POSIX cases skip on Windows and no run has executed them on a Linux or
+  macOS column yet. `release.yml` has
   never run, because the PyPI project and its trusted publisher do not exist yet.
 
 ## 0.4.0 - initial official modules

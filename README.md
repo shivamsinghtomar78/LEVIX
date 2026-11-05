@@ -106,12 +106,18 @@ plugin SDK, security model, and the phase roadmap.
 
 Version 0.4.0 delivers the core engine, the dashboard and all seven official modules. What
 is *not* done is stated rather than implied: every hand run behind these pages was made on
-one Windows 11 machine, and the CI matrix that covers Linux and macOS has now run four times
-- the fourth (`5b047ad`) is **green on all seven jobs**, so the suite, the linter, the
+one Windows 11 machine, and the CI matrix that covers Linux and macOS has now run five times
+- the fourth (`5b047ad`) and fifth (`75daed2`) are both **green on all seven jobs**, so the
+suite, the linter, the
 formatter and the type checker pass on Ubuntu, macOS and Windows at Python 3.12 and 3.13,
-and the no-extras wheel job passes on Ubuntu. What that does not buy: the columns skip the
-ten device and OS-tool cases, nothing here has been hand-run on Linux or macOS, several POSIX
-behaviours have no assertion behind them at all, and the release workflow that would put
+and the no-extras wheel job passes on Ubuntu. Run #5 is the one that carries the log-redaction
+tests, including the case that opens a real rotating `levix.log` and reads the bytes back, so
+that promise now holds on three operating systems. The key-store permission tests
+(`tests/test_secrets.py`) join that proof only on the next run: three of their four cases assert
+a POSIX file mode and skip on this machine. What that does not buy: the columns skip the
+ten device and OS-tool cases, nothing here has been hand-run on Linux or macOS, a green column
+proves a branch was reached rather than a POSIX behaviour observed, and the release workflow
+that would put
 `levix` on PyPI has never run. Plugin *install* and standalone binaries remain open.
 [docs/roadmap/CURRENT_STATUS.md](docs/roadmap/CURRENT_STATUS.md)
 lists what is proven, how it was proven, and the thirteen things no reader should quote as

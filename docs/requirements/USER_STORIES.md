@@ -298,16 +298,22 @@ credential.
   `password` (exit 5) and `config show`/`list` mask such values as `set, hidden` — without
   brackets, because the mask lands in a Rich table cell (`config_cmd.py:28,48,68,92`,
   `config.py:132`). Writes prefer the keyring and delete a stale
-  file copy; the fallback file is hardened on every write with `chmod 0600` plus, on Windows,
-  `icacls /inheritance:r /grant:r <user>:F` (`secrets.py:81-104,134-155`).
+  file copy; the fallback file is created at `0600` and hardened on every write with
+  `chmod 0600` plus, on Windows,
+  `icacls /inheritance:r /grant:r <user>:F` (`secrets.py:81-104,128-139,142-163`).
   `LEVIX_DISABLE_FILE_SECRETS=1` refuses the plaintext store outright; `doctor` reports it as
   `degraded`, never success, with `pip install "levix[secrets]"` as the remedy (`doctor.py:49-57`).
   Loopback and Ollama endpoints need no key; a remote host without one is refused (`ai/core.py:162-170`).
 - Not implemented: nothing here is untested any more — `tests/test_logging.py` (6 functions, 11
   cases) asserts redaction, including that a key written by a real command does not appear in a
-  real `levix.log`. What is still only read, not observed: the *mode* of the secrets file. The
-  `chmod 0600` call runs on every platform (CI run #4 executes it on Ubuntu and macOS), but no
-  test stats the result, so "owner-only on POSIX" is a reading of `secrets.py:134-137`.
+  real `levix.log`, and `tests/test_secrets.py` (4 functions) stats the secrets file instead of
+  reading the code that protects it: on Windows it asserts the ACL `icacls` reports holds one
+  grant, to this user, with inheritance removed, and on POSIX it asserts mode `0600` — including
+  with the `chmod` forced to fail, which is why `_write_file` now creates the file at `0600`
+  rather than writing it and hardening it afterwards. The POSIX half runs only on the Linux and
+  macOS columns (it skips here, where `st_mode` is not what Windows enforces), so it is written
+  but not yet *observed*: the first run of `ci.yml` that carries those three cases is the moment
+  the claim becomes an observation.
   What used to be on this list is closed: `levix ai key set` and `levix ai key clear`
   exist (`ai/cli.py:519-594`), so the hint in `config_cmd.py:92-99` points at a real command, and
   `ai/core.py:42` no longer advertises a `levix secrets` command that was never built.
@@ -319,7 +325,11 @@ credential.
   `::test_key_set_falls_back_to_the_owner_only_file`,
   `::test_key_set_with_the_file_store_disabled_is_a_dependency_error`,
   `::test_key_set_without_a_terminal_names_the_environment_variable`,
-  `::test_key_clear_removes_what_key_set_wrote`.
+  `::test_key_clear_removes_what_key_set_wrote`, and on the permissions themselves:
+  `tests/test_secrets.py::test_a_stored_key_lands_in_a_file_only_the_owner_can_read`,
+  `::test_a_chmod_that_fails_leaves_no_more_access_than_the_open_gave`,
+  `::test_rewriting_an_existing_store_does_not_widen_its_access`,
+  `::test_the_acl_holds_one_explicit_grant_and_no_inherited_read`.
 
 ## US-15 — Ship a module using only packaging metadata (AUTH)
 

@@ -87,7 +87,7 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 
 | ID | Requirement | Where implemented | Verified by |
 | --- | --- | --- | --- |
-| FR-51 | Secret lookup order is `LEVIX_<NAME>` → OS keyring (service `levix`) → owner-only file `secrets.json`; the source is returned with the value. | `src/levix/secrets.py` (`get_secret`) | `tests/modules/test_ai.py::test_key_from_the_environment_wins`, `::test_key_from_the_keyring_when_env_is_silent`, `::test_key_from_the_owner_only_file_when_no_keyring` |
+| FR-51 | Secret lookup order is `LEVIX_<NAME>` → OS keyring (service `levix`) → owner-only file `secrets.json`; the source is returned with the value. | `src/levix/secrets.py` (`get_secret`) | `tests/modules/test_ai.py::test_key_from_the_environment_wins`, `::test_key_from_the_keyring_when_env_is_silent`, `::test_key_from_the_owner_only_file_when_no_keyring`; the file's own permissions are `tests/test_secrets.py` (the Windows ACL case runs here, the three POSIX mode cases skip here) |
 | FR-52 | Config files are never consulted for secrets, and the AI module prints only the key's source. | `config.is_secret_key`, `secrets.py` docstring, `modules/ai/cli.py::check` | `tests/modules/test_ai.py::test_no_key_anywhere_reports_none` |
 | FR-53 | Writing a secret prefers the keyring and removes any stale file copy. | `secrets.set_secret` | `tests/modules/test_ai.py` (keyring-path tests) |
 | FR-54 | The fallback file is hardened on every write: `chmod 0600` plus, on Windows, `icacls /inheritance:r /grant:r <user>:F`. | `secrets._harden` | `tests/modules/test_ai.py::test_key_set_falls_back_to_the_owner_only_file` (the Windows `icacls` argument list runs); the POSIX `chmod 0600` branch is unverified here — see Known gaps |

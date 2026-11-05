@@ -127,7 +127,15 @@ def _read_file(path: Path) -> dict[str, str]:
 
 def _write_file(path: Path, data: dict[str, str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    payload = json.dumps(data, indent=2, sort_keys=True).encode("utf-8")
+    # The file is created at 0600 rather than written at the default mode and hardened
+    # afterwards: `_harden`'s chmod is best-effort on purpose, so a create-then-harden
+    # sequence leaves a key readable to the group and to other users whenever that chmod
+    # fails. The mode argument is masked by umask, and 0600 asks for no group or other bit
+    # for a mask to remove.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
+    with os.fdopen(fd, "wb") as handle:
+        handle.write(payload)
     _harden(path)
 
 
