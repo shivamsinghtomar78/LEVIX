@@ -1,6 +1,9 @@
 # The three-platform gate. Everything merged or pushed to main gets checked on the two
-# platforms no local run has ever covered - the documentation is honest about that being
-# the weakest claim in the project, and this workflow is how it stops being one.
+# platforms no local run has ever covered. Run #4 (`5b047ad`) is green on all seven jobs, so
+# the suite does now execute on Ubuntu and macOS - but the columns run `-m "not integration"`,
+# so the ten device/OS-tool cases are still Windows-only results, and a green column proves a
+# branch was reached, not that its POSIX behaviour was asserted
+# (`docs/roadmap/CURRENT_STATUS.md` §What is not verified).
 #
 # Nothing here uploads anything. Publication lives in release.yml and happens on a tag.
 name: CI

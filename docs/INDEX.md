@@ -9,11 +9,14 @@ Two rules govern the whole set, and they are the reason the pages read the way t
   the intention as if it shipped.
 * **A claim is only as good as the platform it was checked on.** The hand runs behind these
   pages were made on Windows 11 (`sys.platform = "win32"`), Python 3.12.10. GitHub Actions
-  has now executed the suite on Ubuntu and macOS too, and run #3 put **all six matrix
-  columns red on eight test functions that depend on the machine they run on**. All eight
-  are fixed in the tree, and the fixes are believed only as far as the next run proves them.
-  Nothing in these pages may be quoted as cross-platform verified until every column is
-  green. `docs/roadmap/CURRENT_STATUS.md` names each failure and what it took.
+  has executed the suite on Ubuntu and macOS too, and run #4 (`5b047ad`) came back **green on
+  all seven jobs** - `Lint`, `Format`, `Types` and `Test suite` on six columns and the
+  no-extras wheel job. Run #3 had put all six columns red on eight machine-dependent tests;
+  every one of those eight is now confirmed fixed on the machine that found it. What the
+  green still does not say: the columns run `-m "not integration"`, so the ten device and
+  OS-tool cases have never run anywhere but here; no human has run a command on Linux or
+  macOS; and the POSIX behaviours listed in `docs/roadmap/CURRENT_STATUS.md` §What is not
+  verified have no assertion behind them. Quote those, not the colour of the badge.
 
 Start with `requirements/PRD.md` for the product, `architecture/SYSTEM_ARCHITECTURE.md`
 for the shape, and `roadmap/CURRENT_STATUS.md` for where the work actually stands.
@@ -102,7 +105,7 @@ into this directory, so `levix plugins info <name>` prints a path that exists.
 | `CHANGELOG.md` | Release history, with an `Unreleased` section that carries the current work. |
 | `SECURITY.md` | Vulnerability reporting. |
 | `LICENSE` | MIT. |
-| `.github/workflows/ci.yml` | The matrix that runs the lint, type and `-m "not integration"` suite on Linux, macOS and Windows, plus a wheel installed with no extras. Added 2026-11-05, run three times: the wheel job has passed on Ubuntu every time, and run #3 is the first suite result that can be trusted - red on all six columns, on eight machine-dependent tests. |
+| `.github/workflows/ci.yml` | The matrix that runs the lint, type and `-m "not integration"` suite on Linux, macOS and Windows, plus a wheel installed with no extras. Added 2026-11-05, run four times: the wheel job has passed on Ubuntu every time, run #3 is the first suite result that can be trusted (red on all six columns, on eight machine-dependent tests, all eight then fixed) and **run #4 (`5b047ad`) is green on all seven jobs**. The green covers only the non-`integration` set. |
 | `.github/workflows/release.yml` | Tag-triggered build, GitHub release and PyPI upload through trusted publishing. Has never run, and cannot until the PyPI project exists. |
 | `plugin-examples/hello/` | A real, installable example plugin: its own `pyproject.toml`, one manifest, one command. |
 | `src/levix/` | The code. Docstring comments explain *why*; this directory explains *what*. |

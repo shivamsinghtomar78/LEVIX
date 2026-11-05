@@ -1,20 +1,22 @@
 # LEVIX Acceptance Criteria
 
 Each criterion states behaviour asserted by a named test in `tests/` or observable from a documented command. Exit codes are the table in
-`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 583 test functions in 17 files (10 in `tests/`, 7 in `tests/modules/`)
-collecting to 705 parametrised cases, 10 marked `integration`; the hand run behind every line below is `700 passed, 5 skipped` (the five skips
+`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 589 test functions in 18 files (11 in `tests/`, 7 in `tests/modules/`)
+collecting to 716 parametrised cases, 10 marked `integration`; the hand run behind every line below is `711 passed, 5 skipped` (the five skips
 are all symlink cases - this Windows account cannot `os.symlink`, and three of them are POSIX-only by design). All of it was measured
 on Windows 11 with Python 3.12.10 in an editable `.venv` install. GitHub Actions runs
 the same tree minus the 10 `integration` cases on Ubuntu, macOS and Windows; its third run
-was **red on all six columns, on eight test functions that depend on the machine**, and all
-eight are fixed in the tree awaiting a fourth run, so no line below is a cross-platform
-result yet. `tests/conftest.py` keeps runs
+was **red on all six columns, on eight test functions that depend on the machine**, all eight
+were fixed, and its fourth run (`5b047ad`) is **green on all seven jobs**. So the lines below
+are now cross-platform results for the 706 non-`integration` cases and Windows-only results
+for the other ten - and for anything a runner never asserts, which §What is not verified lists.
+`tests/conftest.py` keeps runs
 off a real profile (`LEVIX_*` cleared, `LEVIX_HOME` in a temp directory, `NO_COLOR=1`, file logging disabled at `conftest.py:38`, registry
 reset per test) and `run_cli` calls the real entry point `levix.main.main(list(argv))`, so exit codes and history rows are part of what is
-asserted. Checks: `python -m pytest -o addopts="" -q` (705 collected, `700 passed, 5 skipped, 2 warnings in 124.42 s`, no network, no real TTY - and yes, that includes the 10
-`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `690 passed, 5 skipped, 10 deselected in 106.02 s`), `python -m pytest -m integration` (those 10 alone: `10 passed, 695
+asserted. Checks: `python -m pytest -o addopts="" -q` (716 collected, `711 passed, 5 skipped, 2 warnings in 97.06 s`, no network, no real TTY - and yes, that includes the 10
+`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `701 passed, 5 skipped, 10 deselected`), `python -m pytest -m integration` (those 10 alone: `10 passed, 706
 deselected`), `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests plugin-examples` (both exit 0,
-80 files already formatted), `python -m mypy` (61 files - `[tool.mypy].files` also covers the example plugin - no issues) and the same with
+81 files already formatted), `python -m mypy` (61 files - `[tool.mypy].files` also covers the example plugin - no issues) and the same with
 `--platform win32`, `--platform linux` and `--platform darwin`, `levix doctor`. Citations: a bare `file.py:line` is under `src/levix/`; `tests/FILE.py` names a test file (module tests are
 `tests/modules/FILE.py`) and each identifier after it is one of its test functions.
 
@@ -241,11 +243,10 @@ filter is applied at `commands/doctor_cmd.py:43-54`.
 
 | Subject | What cannot be accepted | Why |
 | --- | --- | --- |
-| POSIX-only paths | the `chmod 0600` effect and keyring branch of `secrets.py:81-104`; the `ip addr show`, `ifconfig`, `resolv.conf`, `nsswitch.conf`, `route -n` parsers in `hacker`; `brew install ffmpeg` / `sudo apt install ffmpeg` advice | only the Windows branch (`icacls /inheritance:r /grant:r <user>:F`) and only `ipconfig` / `route print` ran here; `tests/modules/test_ai.py::test_key_from_the_owner_only_file_when_no_keyring` and `tests/modules/test_hacker.py::test_ip_addr_show_lists_interfaces_addresses_and_flags` drive those paths with fakes or captured text, never a real POSIX host, and `modules/tube/core.py:40-51` picks advice by `sys.platform` |
+| POSIX-only paths | the effect of `chmod 0600` and the keyring branch of `secrets.py:81-104`; the `ip addr show`, `ifconfig`, `resolv.conf`, `nsswitch.conf`, `route -n` parsers in `hacker`; `brew install ffmpeg` / `sudo apt install ffmpeg` advice | the `chmod` call itself now executes on the Ubuntu and macOS columns of CI run #4, but nothing stats the mode, so the effect is unaccepted; `icacls /inheritance:r /grant:r <user>:F` is the only hardening whose result has been observed. `tests/modules/test_ai.py::test_key_from_the_owner_only_file_when_no_keyring` and `tests/modules/test_hacker.py::test_ip_addr_show_lists_interfaces_addresses_and_flags` drive those paths with fakes or captured text, never a real tool's output, and `modules/tube/core.py:40-51` picks advice by `sys.platform` |
 | Real TTY behaviour | playing Snake or Tetris by key, `files browse`, `monitor live`, animated `hacker matrix`, the dashboard on a screen | AC-15 forces refusal or bounding when stdout is a pipe; screens are driven headlessly by Textual's Pilot (`tests/test_dashboard.py`, `tests/modules/test_files.py::test_browse_screen_copies_previews_and_deletes`, `tests/modules/test_arcade.py::test_the_snake_screen_steers_on_a_key_redraws_and_settles`, the last two `integration`) |
 | Typed destructive words | a human typing `DELETE`, `OVERWRITE` or `RUN` at a real prompt | AC-25/AC-26 are asserted only through the non-TTY refusal; `approve.py:51-59` has no interactive test |
 | Audible playback and a real download | sound actually reaching a device; a merged-stream download and a `--convert-to` that really ran | `tests/modules/test_music.py::test_zero_five_seconds_of_a_real_tone_reaches_a_real_output_device` is `integration` and device-dependent; the tube tests drive the ffmpeg verdict through `core.ffmpeg_path()` patched in a test (`tests/modules/test_tube.py::test_a_conversion_works_when_ffmpeg_is_present`), and no download was ever performed for real because the build made no network requests. Note the machine state: `ffmpeg`, `ffprobe` and `ffplay` ARE on PATH here (a winget `yt-dlp.FFmpeg` build), so `capabilities.probe("ffmpeg")` and `probe("media_player")` both report `ok` and the exit-7 refusal is not reachable on this host without patching |
 | Network providers | live Tube downloads, `levix ai` against a real server, `levix update` against PyPI | the suite substitutes Tube's `_make_ydl` seam and the AI transport; `levix update` and `update --json` have no test (`PRD.md` FR-94, FR-95) and need a reachable `https://pypi.org/pypi/levix/json` for a name that is not published |
-| Log redaction | "secrets never reach the log" | `logging_setup.RedactFilter` is read but asserted by no test, and `tests/conftest.py:38` disables file logging (`NON_FUNCTIONAL_REQUIREMENTS.md` NFR-5.3) |
 | Distribution | `pipx install levix`, wheels, standalone binaries | `README.md:13-23` advertises them and nothing is published: `https://pypi.org/pypi/levix/json` answers 404 and `levix update` exits 8 naming it. The wheels build (`python -m build`, 66 entries, `levix/py.typed` in) and `.github/workflows/release.yml` would publish them, but the PyPI project and its trusted publisher do not exist yet. The only accepted install remains `pip install -e ".[dev,all]"` from this tree |
-| CI evidence | "the suite is green on every push" | `.github/workflows/ci.yml` (3 OSes x Python 3.12/3.13, plus a no-extras wheel job) ran for the first time on 2026-11-05: the wheel job **passed on Ubuntu**, the four POSIX columns died at `mypy` on a Windows-only stat attribute (fixed), and both Windows columns died inside the suite. **Not one column is green yet**, so the suite figure quoted above is still a hand run on Windows 11 |
+| CI evidence | "the suite is green on every push" **is now accepted for the non-`integration` set**; what is not accepted is anything the columns never run | `.github/workflows/ci.yml` (3 OSes x Python 3.12/3.13, plus a no-extras wheel job) has run four times on 2026-11-05. Run #4 (`5b047ad`) is **green on all seven jobs** - `Lint`, `Format`, `Types` and `Test suite` each report success on Windows, Ubuntu and macOS at both versions, and the wheel job's five assertions pass on Ubuntu. The columns run `-m "not integration"`, so the ten device and OS-tool cases and the file-backed redaction case have only ever run on Windows 11 here, and `release.yml` has never run at all |

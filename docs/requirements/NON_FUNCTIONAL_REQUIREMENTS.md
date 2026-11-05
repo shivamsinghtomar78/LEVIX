@@ -57,8 +57,8 @@ what is enforced.
 | --- | --- | --- | --- |
 | NFR-5.1 | **No `shell=True` anywhere.** Every subprocess is an argument list, resolved through `shutil.which` where the program is chosen dynamically. | `spawn.run`, `secrets._harden`, `config_cmd.edit`, `tube/core.py::launch` (`shell=False`), `ai/core.py::run_proposal`, `hacker/core.py::run_tool` | `tests/modules/test_tube.py::test_a_player_is_handed_an_argument_list_not_a_shell_string`; `pyproject.toml` keeps flake8-bandit `S` rules selected (only `S603`, `S607` ignored) |
 | NFR-5.2 | Commands proposed by a model are refused before approval if they contain a pipeline, `;` or a redirection; execution is `shell=False` on a `shutil.which`-resolved path. | `ai/core.py::extract_proposal`, `run_proposal` | `tests/modules/test_ai.py::test_command_refuses_a_pipeline_proposal_before_any_approval` |
-| NFR-5.3 | Credentials never enter logs. Redaction is a `logging.Filter` attached to the logger, so a module that logs a formatted exception cannot bypass it: `Authorization: bearer …`, `sk-…`, `ghp_`/`gho_`/`github_pat_…` and any `*api[_-]?key|token|secret|password*=…` pair are replaced. | `src/levix/logging_setup.py` (`RedactFilter`, `_PATTERNS`) | **unverified** — no test asserts redaction (see Known gaps) |
-| NFR-5.4 | Nothing is logged to stdout, which would corrupt Rich and Textual output; only a stderr WARNING handler exists when no file handler could be opened. | `logging_setup.setup` | unverified |
+| NFR-5.3 | Credentials never enter logs. Redaction is a `logging.Filter` attached to the logger, so a module that logs a formatted exception cannot bypass it: `Authorization: bearer …`, `sk-…`, `ghp_`/`gho_`/`github_pat_…` and any `*api[_-]?key\|token\|secret\|password*=…` pair are replaced. | `src/levix/logging_setup.py` (`RedactFilter`, `_PATTERNS`) | `tests/test_logging.py` — six parametrised shapes through `redact`, one through a real `LogRecord`, one that writes a real rotating log file and greps it, one that adds an unfiltered handler to prove the logger-level filter. **Residual:** patterns, not a schema — a credential in a shape they do not name (a JWT, say) is still logged; see Known gaps |
+| NFR-5.4 | Nothing is logged to stdout, which would corrupt Rich and Textual output; only a stderr WARNING handler exists when no file handler could be opened. | `logging_setup.setup` | `tests/test_logging.py::test_the_only_console_handler_writes_to_stderr` (the fallback handler's stream is `sys.stderr` and its level is `WARNING`) |
 | NFR-5.5 | Secrets are never read from or written to configuration files; `config list`/`show` mask secret-shaped keys and `config set` refuses them. | `secrets.py` docstring, `config.is_secret_key`, `commands/config_cmd.py` (`_MASK`) | `tests/test_config.py`; observed masking of `ai.max_tokens` |
 | NFR-5.6 | The plaintext secret fallback is described as what it is — owner-only access control, not encryption — and `doctor` reports it as `degraded`. `LEVIX_DISABLE_FILE_SECRETS=1` removes it entirely. | `secrets.backend`, `doctor.environment` | `tests/modules/test_ai.py::test_key_from_the_owner_only_file_when_no_keyring` |
 | NFR-5.7 | No request ever asks a media site for cookies, credentials or account state, and there is no DRM or download-protection bypass; `file://` URLs stay off until explicitly allowed. | `modules/tube/core.py` | `tests/modules/test_tube.py::test_no_request_ever_asks_for_credentials_or_cookies`, `::test_file_urls_stay_disabled_until_they_are_explicitly_allowed` |
@@ -127,18 +127,24 @@ what is enforced.
 | ID | Requirement | Delivered by | Evidence |
 | --- | --- | --- | --- |
 | NFR-11.1 | No test touches a real user profile: the `levix_home` fixture deletes every `LEVIX_*` variable, sets `LEVIX_HOME`, disables file logging and forces `NO_COLOR=1`. | `tests/conftest.py` | file logging is disabled because an open handle makes Windows fail to delete the temp directory |
-| NFR-11.2 | Tests run the real entry point so exit codes and history are exercised, not just command bodies. | `tests/conftest.py::run_cli` → `levix.main.main(list(argv))` | `700 passed, 5 skipped` suite (the skips are all symlink cases) |
+| NFR-11.2 | Tests run the real entry point so exit codes and history are exercised, not just command bodies. | `tests/conftest.py::run_cli` → `levix.main.main(list(argv))` | `711 passed, 5 skipped` suite (the skips are all symlink cases) |
 | NFR-11.3 | The registry is injectable, and reset before and after every test. | `registry.use`, `conftest._reset_registry` (autouse) | `tests/test_registry.py::test_active_registry_is_injectable_and_resettable` |
 | NFR-11.4 | The dashboard is tested headless with Textual's Pilot (`run_test(headless=True, size=(100, 30))`) because the suite runs where there is no terminal. | `tests/test_dashboard.py` header, `app.run_test` | 15 dashboard tests |
 | NFR-11.5 | Markers `integration` and `slow` are declared and `--strict-markers` is on; 10 tests are marked `integration`. | `pyproject.toml` `[tool.pytest.ini_options]` | no test uses `slow`. Three of the ten ask the machine which sound devices it has, which is what CI's headless runners cannot answer |
 
 ## Known gaps
 
-- **Redaction is unverified.** FR/NFR-5.3 is load-bearing for a security promise and has no
-  test: `logging_setup.RedactFilter.redact` is exercised only by reading it.
-- **No POSIX verification.** chmod, icacls, platformdirs, `ip`/`ifconfig`/`resolv.conf` paths
-  and the POSIX keyring are designed for but unproven in this environment
-  (`CHANGELOG.md`: "Verified on Windows only").
+- **Redaction matches patterns, not a schema.** `tests/test_logging.py` now proves what
+  `RedactFilter` claims to remove, and proves it reaches the file. What remains true is the
+  other half: a credential in a shape the four patterns do not name — a JWT in a provider's
+  error body, an opaque `X-Auth: …` header — is logged verbatim, because nothing here parses
+  the message.
+- **POSIX behaviours are still unasserted.** CI run #4 (`5b047ad`) is green on Ubuntu and
+  macOS, so the POSIX branches of the code the suite reaches do execute there — including the
+  `chmod` in `secrets._harden`. What no test does is stat the resulting mode, run the OS's own
+  network tools and parse their real output (`ip addr show`, `ifconfig`, `resolv.conf`,
+  `nsswitch.conf`, `route -n`), or exercise the POSIX keyring. The parsers are fed captured
+  POSIX text; that is a test of the parser, not of the platform.
 - **Coverage is configured but no threshold is enforced** (`[tool.coverage.run]` with
   `branch = true`; no `--cov` in `addopts`).
 - **The pre-commit hooks are configured, not run.** `.pre-commit-config.yaml` names
@@ -147,6 +153,14 @@ what is enforced.
 
 ## Closed since the first draft of this page
 
+- **NFR-5.3 and NFR-5.4 had no test.** `tests/test_logging.py` (6 functions, 11 cases) drives
+  `RedactFilter` through six credential shapes, through a real `LogRecord`, into a real
+  rotating log file, and through a handler that carries no filter of its own - which is the
+  only way to show the promise lives on the logger rather than on a handler someone could
+  replace. It also asserts the fallback handler is a `WARNING`-level stderr one. The file
+  writes to disk even though `tests/conftest.py` keeps file logging off for the rest of the
+  suite, so it closes its own handlers: an open handle is what stops Windows deleting a
+  temporary directory.
 - **There were no monitor tests.** `tests/modules/test_systempulse.py` now holds 40 test
   functions (46 collected cases), the sampling layer against a fake `psutil` and the command
   surface against the real machine, so NFR-7.1's most visible instance - the `temp` and `gpu`
@@ -164,7 +178,9 @@ what is enforced.
   not crypto), `S310` on the single HTTPS release-check feed in `update_cmd.py`, `S104` on the
   `0.0.0.0` literal Hacker uses to describe an any-address bind, and `B009` on two
   `getattr(os, "getuid")` lookups. Two more sit in `tests/modules/test_ai.py` (`E731` on a
-  two-line stand-in for `ctx.secret`, `S108` on a path that is only ever asserted absent).
+  two-line stand-in for `ctx.secret`, `S108` on a path that is only ever asserted absent) and
+  one in `tests/test_logging.py` (`S105` on an invented `ghp_…` string whose only job is to be
+  unmistakable in a failure message).
 - **No inert configuration keys.** The two that existed (`general.confirm_destructive`,
   `dashboard.show_system_info`) are removed from `SCHEMA` and `defaults.toml` rather than
   wired up: the first would have made the destructive-action gate optional, and the second

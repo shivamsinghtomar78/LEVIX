@@ -3,8 +3,10 @@
 Written against the 0.4.0 tree as it stands. The hand verification behind every line is
 Windows 11 with Python 3.12.10. GitHub Actions now executes the non-integration suite on
 Ubuntu and macOS too; its third run failed eight test functions that depend on the machine
-they run on, all eight are fixed in the tree, and the fourth run has to agree. So a story
-marked `Satisfied today` is still a Windows result until every column is green.
+they run on, all eight were fixed, and its **fourth run (`5b047ad`) is green on all seven
+jobs**. So a story marked `Satisfied today` is a cross-platform result for the cases CI runs
+and still a Windows-only result for the ten `integration` cases and for anything a runner
+never asserts.
 `Satisfied today` names commands read in `src/levix`; `Verified by` names tests collected in
 `tests/`; `Not implemented` states plainly what is only partly met.
 Personas are the three in `PRD.md` §3: **DEV** (developer on their own machine),
@@ -301,9 +303,12 @@ credential.
   `LEVIX_DISABLE_FILE_SECRETS=1` refuses the plaintext store outright; `doctor` reports it as
   `degraded`, never success, with `pip install "levix[secrets]"` as the remedy (`doctor.py:49-57`).
   Loopback and Ollama endpoints need no key; a remote host without one is refused (`ai/core.py:162-170`).
-- Not implemented: log redaction (`logging_setup.RedactFilter`) exists but no test asserts it, and
-  the POSIX `chmod 0600` branch is unread here — the `icacls` call is the only hardening path the
-  suite runs. What used to be on this list is closed: `levix ai key set` and `levix ai key clear`
+- Not implemented: nothing here is untested any more — `tests/test_logging.py` (6 functions, 11
+  cases) asserts redaction, including that a key written by a real command does not appear in a
+  real `levix.log`. What is still only read, not observed: the *mode* of the secrets file. The
+  `chmod 0600` call runs on every platform (CI run #4 executes it on Ubuntu and macOS), but no
+  test stats the result, so "owner-only on POSIX" is a reading of `secrets.py:134-137`.
+  What used to be on this list is closed: `levix ai key set` and `levix ai key clear`
   exist (`ai/cli.py:519-594`), so the hint in `config_cmd.py:92-99` points at a real command, and
   `ai/core.py:42` no longer advertises a `levix secrets` command that was never built.
 - Verified by: `tests/modules/test_ai.py::test_key_from_the_environment_wins`,
@@ -364,11 +369,15 @@ wrapping `levix` is safe.
   [SECTION]` prints `key=value` lines, and colour follows `NO_COLOR` / `LEVIX_NO_COLOR=1` /
   `TERM=dumb` / a non-TTY stdout (`terminal.detect`). History is best-effort: any failure inside
   `main._record` is swallowed and cannot change your code.
-- Not implemented: no column of the pipeline is **green** — `.github/workflows/ci.yml` ran
-  three times on 2026-11-05; its wheel job passed on Ubuntu each time, and the third run -
-  the first whose suite result could be trusted, see `docs/technology/PYTHON_PACKAGING.md` -
-  failed all six matrix columns on eight tests that depend on the machine they run on. Those
-  eight are fixed in the tree and a fourth run has to agree. The checks themselves are the
-  commands in `CONTRIBUTING.md:42-50`, and the 700-pass figure in `PRD.md` S4 was produced by
+- Not implemented: the pipeline is **green** but not **complete**. `.github/workflows/ci.yml`
+  ran four times on 2026-11-05; its wheel job passed on Ubuntu each time, its third run was
+  the first whose suite result could be trusted (see `docs/technology/PYTHON_PACKAGING.md`)
+  and failed all six matrix columns on eight tests that depend on the machine they run on,
+  and its **fourth run (`5b047ad`) is green on all seven jobs**. What is still missing is not
+  a red column: the ten `integration` cases have run on no platform but Windows 11, no column
+  asserts the POSIX items in `ACCEPTANCE_CRITERIA.md` §What is not verified, and
+  `.github/workflows/release.yml` has never run because the PyPI project and its trusted
+  publisher do not exist yet. The checks themselves are the
+  commands in `CONTRIBUTING.md` §Development workflow, and the 711-pass figure in `PRD.md` S4 was produced by
   hand on Windows 11. `levix update` also presumes a published `levix`
   name on PyPI, which does not exist yet.

@@ -43,9 +43,9 @@ pre-commit install
 ruff check src tests plugin-examples
 ruff format src tests plugin-examples
 mypy                                # [tool.mypy].files already includes plugin-examples
-pytest                          # all 705 cases; no network, no real TTY
+pytest                          # all 716 cases; no network, no real TTY
 pytest -m integration           # only the 10 that touch a device or a real OS tool
-pytest -m "not integration"     # the CI-safe subset (695 cases)
+pytest -m "not integration"     # the CI-safe subset (706 cases)
 levix doctor
 ```
 
@@ -56,8 +56,20 @@ tests that do not depend on the machine: a case that needs sound hardware, a sym
 runner may not be allowed to create, or a terminal width is an `integration` case or is
 given its width explicitly, because a runner that disagrees with your laptop is the only
 way this project finds out. The hooks in `.pre-commit-config.yaml` mirror the lint, format
-and type steps so CI is not a surprise; the suite is not in a hook because it takes ~2.5
-minutes.
+and type steps so CI is not a surprise; the suite is not in a hook because a full uncontended
+run takes ~1.6 minutes here (`docs/roadmap/CURRENT_STATUS.md` §Test suite as last run).
+
+Run one pytest process at a time on a small machine, and never pipe the suite through `tail` -
+it discards the traceback of the one failure you will want to read. `pytest-xdist` is not a
+dependency, so parallelism here means separate processes, and the failures this tree has
+observed are one arcade screen case and one unnamed test, each seen once while several
+processes overlapped on an 8 GB laptop. Seventeen later attempts - some with more concurrency
+than the failures had - all passed, so contention is a correlation from two lost tracebacks and
+not a proven cause. Note that the arcade case is `integration`-marked, so CI never runs it: a
+green matrix neither catches it nor clears it. If you write a case that drives a Textual timer,
+give the loop a budget in app messages rather than `pilot.pause` iterations, or mark it
+`integration` and say so. Keeping the suite to one process at a time is cheap, and it is what
+keeps the timings in `docs/roadmap/CURRENT_STATUS.md` §Test suite as last run comparable.
 
 Every command needs: help text, argument validation, a predictable exit code, an entry
 in the exit-code table if it is a new failure class, and a test. If you add a

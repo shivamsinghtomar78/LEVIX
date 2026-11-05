@@ -125,7 +125,7 @@ in a docstring stating that nothing here uses it. `subprocess.run` appears six t
 | Opt out of plaintext | `LEVIX_DISABLE_FILE_SECRETS=1` makes `set_secret` raise a `RuntimeError` telling the user to set the environment variable; `backend()` then reports `("none", "no keyring installed and file store disabled")` |
 | Never printed | `levix ai check` prints the key *source*, not the value; `config show`/`list` mask secret-shaped keys; `context.secret` logs `"secret %s resolved from %s"` with the name and the source, never the value |
 | Never a command-line argument | `levix ai key set` reads the key with `typer.prompt(..., hide_input=True)`, so it stays out of shell history, out of the process list and out of any crash report that carries argv; with no terminal to prompt in it raises `ConfigError` naming the environment variable rather than accepting the key from a pipe |
-| Never logged | `logging_setup.RedactFilter` with four patterns — bearer tokens, `sk-…`, `ghp_`/`gho_`/`github_pat_…`, and any `*api_key|token|secret|password* = <value>` — attached to both the handler and the logger, so it "cannot be bypassed by a module that logs a formatted exception containing a bearer token"; nothing is written to stdout; rotation is 512 KB × 3 backups |
+| Never logged | `logging_setup.RedactFilter` with four patterns — bearer tokens, `sk-…`, `ghp_`/`gho_`/`github_pat_…`, and any `*api_key|token|secret|password* = <value>` — attached to both the handler and the logger, so it "cannot be bypassed by a module that logs a formatted exception containing a bearer token"; nothing is written to stdout; rotation is 512 KB × 3 backups. `tests/test_logging.py` asserts all of that (`::test_a_key_never_reaches_the_log_file`, `::test_a_handler_without_a_filter_still_gets_redacted`, `::test_the_only_console_handler_writes_to_stderr`) |
 
 ### Terminal integrity
 
@@ -170,6 +170,9 @@ in a docstring stating that nothing here uses it. `subprocess.run` appears six t
    per-module table: `PERMISSIONS.md`.
 2. **Redaction is regex-based, not schema-based.** A provider that returns a key in an
    unexpected shape — a JWT in an error body, for instance — is logged verbatim.
+   `tests/test_logging.py` pins exactly what the four patterns do cover (six shapes, a real
+   `LogRecord`, a real log file, and a handler that carries no filter of its own), so this gap
+   is now the documented edge of the implementation rather than an untested assumption.
 3. **No verification that the update check's response is a version and not an instruction.**
    `update_cmd._fetch_latest` parses JSON and compares numeric prefixes, and prints a
    command string the user must run; there is no signature on `latest`, so a hostile proxy
@@ -178,6 +181,12 @@ in a docstring stating that nothing here uses it. `subprocess.run` appears six t
 4. **No test asserts the absence of `shell=True` or of a network call at import time.** The
    tube option-absence tests and `tests/test_router.py`'s heavy-load check are the closest;
    a project-wide guard would be cheap and does not exist.
-5. **Verified on Windows only.** `secrets._harden`'s `icacls` branch, `paths`' POSIX
-   defaults and `terminal`'s VT bootstrap were read, not executed on POSIX, and
-   `SECURITY.md` lists "verified on Windows only" among its known gaps.
+5. **Asserted on Windows only.** CI run #4 (`5b047ad`) executes the tree on Ubuntu and macOS
+   and nothing there fails, so the POSIX *branches* are no longer unread. What still has no
+   assertion: nobody stats the mode of `secrets.json` after `secrets._harden`'s `chmod`, every
+   keyring test replaces `secrets._keyring` with a fake (`tests/modules/test_ai.py:568-599`,
+   `:922-990`) so no OS keyring has ever been asked on any platform, and the suite runs under
+   `LEVIX_HOME`, so `paths`' real POSIX layout is resolved with an override rather than the
+   platform's own defaults. `SECURITY.md` keeps "verified on Windows only" among its gaps for
+   that reason, and this page's mitigation rows are evidence of what was *read and run*, not of
+   what was observed on a POSIX box.

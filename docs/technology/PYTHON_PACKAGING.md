@@ -190,10 +190,12 @@ Confirmed absent from this tree as of writing:
   redirects to a file instead of piping, and re-emits every `FAILED` line as a `::error::`
   annotation so a red column names itself to anyone, without a signed-in account. Run #3 is
   the first trustworthy result: red on all six columns, on eight test functions that depend
-  on the machine they run on. All eight are fixed in the tree and run #4 decides whether that
-  was the whole list, so the numbers quoted in these pages remain hand runs on one Windows 11
-  laptop until a column goes green - which is what `docs/roadmap/CURRENT_STATUS.md` says at
-  the top of its page.
+  on the machine they run on. **Run #4 (`5b047ad`) is green on all seven jobs** - lint,
+  format, types and the suite on six columns, plus this wheel job on Ubuntu - so the eight
+  fixes are proven on the platforms that found them, and the hand-run figures quoted around
+  these pages are no longer the only evidence in the tree. They still are for the ten
+  `integration` cases, which no column runs, and for anything a runner never asserts
+  (`docs/roadmap/CURRENT_STATUS.md` §What is not verified).
 - **Standalone binaries**: PyInstaller is not installed and not referenced in
   `pyproject.toml`; only `spawn.py::is_frozen()` anticipates a frozen build. A frozen build
   has one thing to prove before it is usable: discovery reads

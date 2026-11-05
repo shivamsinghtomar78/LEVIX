@@ -114,8 +114,8 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 | FR-65 | Colour is disabled by `NO_COLOR`, `LEVIX_NO_COLOR=1`, `TERM=dumb` or a non-TTY stdout. | `terminal.detect` | `tests/test_terminal.py`, `tests/conftest.py` (`NO_COLOR=1`) |
 | FR-66 | On Windows, ANSI is only emitted after `ENABLE_VIRTUAL_TERMINAL_PROCESSING` (0x0004) has been set through `GetConsoleMode`/`SetConsoleMode`; failure degrades instead of raising. | `terminal._windows_vt_enabled` | `tests/test_terminal.py` (unit-level) |
 | FR-67 | Anything dynamic that came from outside — a URL, file name, model reply, remote title, OS interface name — is markup-escaped and encoding-adapted before printing. The two helpers are `terminal.markup_safe` (brackets) and `terminal.encode_safe` (codepage), composed at each render site: `main._plain`, `tube/cli.py::_show`, `files/cli.py::show`, `systempulse/cli.py::_network_table` and every cell builder there, `hacker/cli.py`, the dashboard (`app.py`, `module_list.py`, `history.py`), `doctor_cmd`, `plugins_cmd`, `config_cmd`, `create_module_cmd`. | `src/levix/terminal.py` (`markup_safe`, `encode_safe`) | `tests/test_markup_safety.py` (9 functions: the renderer round-trip, an unbalanced tag raises, the config mask, doctor/plugin/dashboard/history surfaces), `tests/modules/test_files.py::test_printable_survives_a_name_the_console_cannot_encode`, `::test_preview_survives_a_name_the_console_cannot_encode`, `tests/modules/test_systempulse.py::test_an_interface_name_with_brackets_is_still_shown` |
-| FR-68 | Logs go to a rotating file (`levix.log`, 512 KB × 3 backups) and never to stdout; only when no file handler could be opened does a WARNING stream handler (stderr) appear. | `src/levix/logging_setup.py` | unverified as a named test |
-| FR-69 | Redaction is a filter on the logger itself, so it cannot be bypassed by a module that logs a formatted exception: bearer headers, `sk-…`, `ghp_`/`gho_`/`github_pat_…` and `*key|token|secret|password=…` pairs are replaced. | `logging_setup.RedactFilter` | `tests/` no dedicated redaction test; see Known gaps |
+| FR-68 | Logs go to a rotating file (`levix.log`, 512 KB × 3 backups) and never to stdout; only when no file handler could be opened does a WARNING stream handler (stderr) appear. | `src/levix/logging_setup.py` | `tests/test_logging.py::test_a_key_never_reaches_the_log_file` (a real `levix.log` is written and read back), `::test_the_only_console_handler_writes_to_stderr` |
+| FR-69 | Redaction is a filter on the logger itself, so it cannot be bypassed by a module that logs a formatted exception: bearer headers, `sk-…`, `ghp_`/`gho_`/`github_pat_…` and `*key\|token\|secret\|password=…` pairs are replaced. | `logging_setup.RedactFilter` | `tests/test_logging.py` (6 functions, 11 cases) — the shapes, a real `LogRecord`, the file, and an unfiltered handler added afterwards. A credential in a shape the four patterns do not name is still logged verbatim (`NON_FUNCTIONAL_REQUIREMENTS.md` Known gaps) |
 | FR-70 | When stdout is redirected, interactive surfaces refuse instead of drawing: `dashboard` exits 2, `files browse` exits 1 and both name a pipe-friendly alternative. | `commands/dashboard_cmd.py`, `modules/files/browse.py::run_browse` | `tests/test_dashboard.py::test_dashboard_refuses_a_redirected_terminal_with_the_usage_code`, `tests/modules/test_files.py::test_browse_help_does_not_start_a_screen` |
 | FR-71 | Long-running animation in a captured stream is bounded, not endless: `hacker matrix` without `--iterations`/`--duration` on a non-TTY is a usage error (exit 2). | `modules/hacker/cli.py` | `tests/modules/test_hacker.py::test_matrix_needs_a_bound_when_stdout_is_captured`, `::test_matrix_stops_at_the_frame_limit`, `::test_matrix_stops_at_the_time_limit`, `::test_matrix_seed_repeats_a_run` |
 
@@ -243,9 +243,6 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 
 Requirements the code does not meet as written, or that no test holds:
 
-- FR-69: log redaction is implemented (`logging_setup.RedactFilter`) and asserted by no test.
-  `tests/conftest.py:4-5` turns file logging off for the whole suite (an open handle stops
-  Windows deleting the temporary home), so the filter is read but never run.
 - FR-94/FR-95: `levix update` has no test at all, and a real one needs
   `https://pypi.org/pypi/levix/json` to resolve for a distribution name that is not published.
 - FR-96/FR-97: `levix create-module` has no test. The scaffold it emits — `__all__ = ["MANIFEST", "build_app"]`
@@ -253,11 +250,12 @@ Requirements the code does not meet as written, or that no test holds:
   (`:111`, `:115`), `build_app()` (`:124`) and even a `tests/test_manifest.py` (`:174`) — is the
   same shape the example plugin ships and `tests/test_plugin_example.py` drives end to end, but
   the generated tree itself is never run and the name-validation exit 5 is asserted by no test.
-- The POSIX half of several requirements is unverified because this is a Windows machine:
-  FR-54 (`chmod 0600` versus the `icacls` branch that ran), FR-103 (the `ip addr show`,
-  `ifconfig`, `resolv.conf` and `route -n` parsers versus the `ipconfig`/`route print` paths
-  that ran), and the keyring backend selection under FR-51/FR-53/FR-55. The suite drives those
-  paths with fakes or captured POSIX text, never on a POSIX host.
+- The POSIX half of several requirements is still unasserted even though CI run #4 (`5b047ad`)
+  is green on Ubuntu and macOS: FR-54 (`secrets._harden`'s `chmod` runs there, nothing stats
+  the mode), FR-103 (the `ip addr show`, `ifconfig`, `resolv.conf` and `route -n` parsers are
+  fed captured POSIX text; the tools themselves are never run), and the keyring backend
+  selection under FR-51/FR-53/FR-55. A green column means the POSIX *branches* the tests reach
+  do not crash; it does not mean any of the four behaviours above was observed.
 - FR-70/FR-71 bound or refuse when stdout is a pipe, which is how every interactive surface is
   tested here. Real TTY behaviour — the dashboard on a screen, `files browse`, `monitor live`,
   `hacker matrix` animating, playing Snake by key — is exercised only through Textual's Pilot.
@@ -269,6 +267,13 @@ Requirements the code does not meet as written, or that no test holds:
 
 Each of these was a real gap and is now either implemented or removed from the requirements:
 
+- FR-68 and FR-69: the logging promises are now run, not read. `tests/test_logging.py`
+  (6 functions, 11 cases) sends six credential shapes through `RedactFilter.redact`, formats
+  one through a real `LogRecord`, writes a real `levix.log` and reads it back, adds a handler
+  with no filter to show the logger-level filter still redacts it, and asserts the fallback
+  console handler is a stderr `WARNING` one. File logging stays off for the rest of the suite
+  (`tests/conftest.py:38`) because an open handle stops Windows deleting the temporary home;
+  this file closes its own handlers for exactly that reason.
 - FR-21: aliases no longer forward to the module group. `router._attach` prepends the canonical
   subcommand (`src/levix/router.py:54-58`), so `levix nt via-alias` arrives as
   `levix stub note via-alias`; `levix q hello` works. Held by

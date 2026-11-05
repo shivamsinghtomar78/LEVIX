@@ -13,35 +13,41 @@
 
 ## Operating systems — honest status
 
-Everything in this repository was **built and tested on Windows 11 (build
+Everything in this repository was **built and hand-tested on Windows 11 (build
 26200, `sys.getwindowsversion().build`), CPython 3.12.10 (MSC v.1943, AMD64)**,
 in Git Bash. That is still the only environment any statement in the docs is
 *hand*-run against. GitHub Actions now executes the lint, the format check,
 `mypy` and `pytest -m "not integration"` on `ubuntu-latest`, `macos-latest` and
-`windows-latest` at Python 3.12 and 3.13, and its third run - the first one whose
-suite result could be trusted, see the `tee` story in
+`windows-latest` at Python 3.12 and 3.13; its fourth run (`5b047ad`) came back
+**green on all seven jobs**, after the third run - the first one whose suite
+result could be trusted, see the `tee` story in
 `docs/roadmap/CURRENT_STATUS.md` - came back **red on all six columns, on eight
-test functions that depend on the machine**. Each of the eight is fixed in the
-tree; none of the fixes is proven until a run says so. The separate bare-wheel job
-(install with no extras, four heavy modules refusing with exit 3, `doctor --json`
-reporting them MISSING) has passed on Ubuntu in every run, which is the one
-non-Windows behaviour in this table that is actually executed rather than inferred.
+test functions that depend on the machine**. So this tree's POSIX code paths are
+*executed* on Linux and macOS and have never failed there. That is a weaker claim
+than the table used to imply in the other direction, and a stronger one than
+"not run at all": a green column proves the branch was reached and nothing
+asserted otherwise, and the ten `integration` cases stay out of every column.
+The separate bare-wheel job (install with no extras, four heavy modules refusing
+with exit 3, `doctor --json` reporting them MISSING) has passed on Ubuntu in
+every run, which is the one non-Windows behaviour in this table that is actually
+exercised rather than inferred.
 
 | Area | Windows 11 | Linux | macOS | Verified? |
 |---|---|---|---|---|
-| Core CLI, config, storage, dashboard | works, all tests hand-run here | same cases executed by CI | same cases executed by CI | **hand-run Windows only**; CI reaches all three and has not gone green yet |
-| Paths (`platformdirs`) | `%APPDATA%\levix`, `%LOCALAPPDATA%\levix\Log` | `~/.config/levix` etc. | macOS equivalents | Windows resolved here; POSIX per platformdirs docs - **not executed** |
+| Core CLI, config, storage, dashboard | works, all tests hand-run here | the CI set (all but the 10 `integration` cases) green in run #4 | the CI set green in run #4 | executed green on all three; **hand-run Windows only**, and the 10 device/OS-tool cases have never run outside Windows |
+| Paths (`platformdirs`) | `%APPDATA%\levix`, `%LOCALAPPDATA%\levix\Log` | `~/.config/levix` etc. | macOS equivalents | Windows resolved here; POSIX per platformdirs docs - **not executed anywhere**, because `tests/conftest.py` sets `LEVIX_HOME` on every platform, so the real POSIX defaults are never asked for |
 | Terminal VT bootstrap (`terminal._windows_vt_enabled`) | `SetConsoleMode(ENABLE_VIRTUAL_TERMINAL_PROCESSING)` via ctypes | n/a (returns True) | n/a (returns True) | Windows only |
-| ffmpeg install advice (`tube/core.py`) | `winget install Gyan.FFmpeg` | `sudo apt install ffmpeg` (fallback key) | `brew install ffmpeg` | strings are in the tree; **only the Windows branch's context was observed here** |
-| psutil sensors (`capabilities.py`, monitor) | runs; temperature often UNSUPPORTED on Windows | temperature sensors typically present | partially | **not executed on POSIX** |
-| keyring backends (`secrets.py`) | Windows Credential Store path | SecretService/libsecret (not installed/probed here) | macOS Keychain | **not executed** on either |
-| `icacls` ACL hardening of the secrets file | shelled out with fixed argv on `os.name == "nt"` | skipped (chmod only) | skipped (chmod only) | Windows only |
-| Audio (PortAudio via sounddevice, tested integration) | real playback test ran here | run #3: `OSError: PortAudio library not found` | run #3: neither failed nor reported - skipped or passed, and the log that would say which needs a signed-in account | **not executed** on either; the three device cases are `integration` and stay out of the matrix, because a headless runner's honest answer is "no devices" |
+| ffmpeg install advice (`tube/core.py`) | `winget install Gyan.FFmpeg` | `sudo apt install ffmpeg` (fallback key) | `brew install ffmpeg` | strings are in the tree; **only the Windows branch's context was observed here** - `tests/modules/test_tube.py:193-202` checks the POSIX strings by calling `install_command_for(platform)` directly, so no POSIX host ever asked for them |
+| psutil sensors (`capabilities.py`, monitor) | runs; temperature often UNSUPPORTED on Windows | temperature sensors typically present | partially | the monitor suite swaps `psutil` for a stand-in; run #4 did execute the real-psutil `run_cli` cases on Linux and macOS, but **no assertion is about a POSIX sensor reading** |
+| keyring backends (`secrets.py`) | Windows Credential Store path | SecretService/libsecret (not installed/probed here) | macOS Keychain | **no real keyring on any platform**: every test replaces `secrets._keyring` with a fake (`tests/modules/test_ai.py:568-599`, `:922-990`) |
+| `icacls` ACL hardening of the secrets file | shelled out with fixed argv on `os.name == "nt"` | skipped (chmod only) | skipped (chmod only) | the `icacls` call ran here; the `chmod` now runs on the POSIX columns too, and **its effect is asserted by no test** |
+| Audio (PortAudio via sounddevice, tested integration) | real playback test ran here | run #3: `OSError: PortAudio library not found` | run #3: neither failed nor reported | **not executed** on either; the three device cases are `integration` and stay out of the matrix, because a headless runner's honest answer is "no devices" |
 | yt-dlp (stubbed in tests; no network in CI) | n/a | n/a | n/a | network path **not executed anywhere**; see `tests/modules/test_tube.py` docstring |
 
 Rule of this document: where a column says "not executed", treat the code as
-plausible, not promised. A CI run that has not gone green does not upgrade a row
-either - it says the code was *reached* on that platform, not that it was right.
+plausible, not promised. A green CI run does not upgrade a row either - it says
+the code was *reached* on that platform without failing, not that the behaviour
+the row names was observed.
 
 ## Console and codepage (the cp1252 constraint)
 

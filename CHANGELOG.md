@@ -26,6 +26,15 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   `psutil`, covering the sampling wrappers, the unsupported rows, the `--watch` deltas, the
   limit semantics, the markup-sensitive cells and the CLI exit codes. This module previously
   had no test file.
+- `tests/test_logging.py`: 6 test functions (11 collected cases) for the one security promise
+  that lived only in a docstring. Six credential shapes through `RedactFilter.redact`, one
+  through a real `LogRecord`, one that lets `setup()` open a real rotating `levix.log` and
+  then reads the bytes back, one that adds a handler carrying **no** filter to prove the
+  logger-level filter is what does the work, one that `filter()` returns `True` (a redaction
+  that dropped the record would hide the command, not protect it), and one that the only
+  console handler writes to stderr at `WARNING`. It closes gap 6 of
+  `docs/roadmap/CURRENT_STATUS.md`; what it does not claim is coverage of a credential in a
+  shape the four patterns do not name.
 - `levix ai key set` / `levix ai key clear`: the write path for the provider credential,
   through `LevixContext.store_secret()` / `forget_secret()` to `secrets.set_secret()` /
   `delete_secret()`. The key is prompted with echoing off, so it never enters argv, the
@@ -182,17 +191,39 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 ### Verification
 
 - `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests
-  plugin-examples` exit 0 (80 files already formatted); bare `python -m mypy` exits 0 with no
+  plugin-examples` exit 0 (81 files already formatted); bare `python -m mypy` exits 0 with no
   issues in 61 source files - `src/levix` plus the example plugin, which is what
-  `[tool.mypy].files` declares and what CI now runs.
+  `[tool.mypy].files` declares and what CI now runs - and `--platform win32`, `--platform linux`
+  and `--platform darwin` each report the same 61 clean.
 - The suite, on this machine: `.venv/Scripts/python.exe -m pytest -o addopts="" -q` runs
-  **583 test functions in 17 files, collecting 705 parametrised cases** and reports
-  **700 passed, 5 skipped, 2 warnings in 124.42 s**, exit 0. The same tree without the ten
+  **589 test functions in 18 files, collecting 716 parametrised cases** and reports
+  **711 passed, 5 skipped, 2 warnings in 97.06 s**, exit 0. The same tree without the ten
   `integration` cases - which is what every CI column runs - is
-  **690 passed, 5 skipped, 10 deselected in 106.02 s**. The five skips are the symlink
+  **701 passed, 5 skipped, 10 deselected in 103.69 s**, and those ten alone are
+  **10 passed, 706 deselected in 10.36 s**. The five skips are the symlink
   cases in `tests/modules/test_files.py` (this account cannot create symlinks; three more
   state that POSIX symlinks need no privilege there). The two warnings are a NumPy 2.5
-  deprecation inside `sounddevice`, raised by the one real-device playback test.
+  deprecation inside `sounddevice`, raised by the one real-device playback test. All three
+  were run with one pytest process at a time; see `docs/roadmap/CURRENT_STATUS.md`
+  §One observed flake for why that is said out loud.
+- Two runs failed while several pytest processes shared this 8 GB machine, and both command
+  lines ended in `| tail`, so neither traceback survived. One names itself:
+  `tests/modules/test_arcade.py::test_the_snake_screen_steers_on_a_key_redraws_and_settles`
+  in a `-m integration` run overlapping a full-suite run. The other is a full-suite run
+  overlapping two integration runs in which one test failed and its name was lost - it is not
+  established to be the arcade case. Seventeen later attempts, all with `-rf --tb=line`, came
+  back green: three concurrent full-suite runs, six concurrent `-m integration` runs, two more
+  integration runs alongside a full suite, five repeats of the six arcade-screen cases while a
+  full suite ran beside them, and one standalone full suite - some carrying more concurrency
+  than either failure had. Nothing was changed, because no traceback means no named assertion
+  to aim at. What the code does say: that case is `@pytest.mark.integration`
+  (`tests/modules/test_arcade.py:559`), so no CI column runs it and the green matrix neither
+  catches nor excuses it, and it advances a real `set_interval` timer
+  (`src/levix/modules/arcade/screens.py:117`) with a bounded number of `pilot.pause(0.01)`
+  calls - a wall-clock budget the scheduler decides, which is the machine-dependence
+  `CONTRIBUTING.md` already tells authors to avoid. `_tick` is synchronous end to end and
+  `snake.py:228` derives `GAME OVER` from `state.alive`, so the two races first suspected are
+  not it.
 - Every `file:line` citation and every `::test_...` name in `docs/` was re-checked against
   this tree with a throwaway script - 205 cited test names among the 580 it held at that
   point, 312 line ranges, none missing or out of bounds. The script was not committed;
@@ -229,7 +260,7 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
   exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
   is up to date when it could not ask.
-- **CI ran three times on 2026-11-05**, each time on the commit that changed it. Run #1
+- **CI ran four times on 2026-11-05**, each time on the commit that changed it. Run #1
   (`fcbcb22`): `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the
   no-extras install, the four exit-3 refusals and the wheel-content assertions are proven on
   a second platform; all four POSIX matrix columns stopped at `Types` on the Windows-only
@@ -242,12 +273,23 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   every `FAILED` line into a `::error::` annotation so a red column names itself without a
   signed-in account. Run #3 (`5fdc644`) is the first result that means something: **all six
   columns red, eight test functions between them**, every one of them dependent on the
-  machine it ran on. All eight are addressed in this commit (`### Fixed` below); the wheel
-  job passed on Ubuntu in every run.
-- Linux and macOS are still unproven for the suite. What run #3 established is that eight
-  cases were shaped by Windows, not that the rest of the tree is right on a runner - and the
-  fixes for those eight are only as good as run #4, because this laptop has PortAudio and
-  real devices, cannot create symlinks, and is not macOS.
+  machine it ran on. All eight are addressed in that commit; the wheel job passed on Ubuntu in
+  every run. **Run #4 (`5b047ad`, run id `42068621524`) is green: all seven jobs `success`,
+  and on each of the six matrix jobs the four steps `Lint`, `Format`, `Types` and
+  `Test suite` report `success` individually** - `windows-latest`, `ubuntu-latest` and
+  `macos-latest` at Python 3.12 and 3.13 - with no failure annotation left behind (the only
+  annotations are GitHub's own Node.js-20 deprecation warning and runner notices). That
+  confirms all eight fixes on the platforms that found them, including the two POSIX symlink
+  cases this laptop can only fake. `docs/roadmap/CURRENT_STATUS.md` §Defects found by CI
+  records each one with the column that closed it.
+- What run #4 does **not** prove: each column runs `pytest -m "not integration"`, so the ten
+  device and OS-tool cases still have only ever executed on Windows 11 here; no command has
+  been run by hand on Linux or macOS; and a green column says a branch was reached without
+  failing, not that the behaviour was asserted. The POSIX items in
+  `docs/roadmap/CURRENT_STATUS.md` §What is not verified - the *effect* of the secrets-file
+  `chmod`, real `ip addr show` / `ifconfig` output, a real POSIX keyring, the platformdirs
+  layout under a real `$XDG_*` - have no test at all, on any platform. `release.yml` has
+  never run, because the PyPI project and its trusted publisher do not exist yet.
 
 ## 0.4.0 - initial official modules
 

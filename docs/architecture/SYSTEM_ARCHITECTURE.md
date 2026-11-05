@@ -167,6 +167,8 @@ Single process per command, one-shot, no daemon, no background jobs.
   target rather than by its own place (Ubuntu, macOS); the `\\?\` device form `os.readlink`
   returns for a Windows link; two tests that asked a headless runner which sound cards it
   has; a 68-character macOS hostname that did not fit a table column; and a notice that
-  wrapped at 80 columns. Each is fixed in the tree, and the fixes are proven by the next
-  run rather than by this page. Until every column is green, nothing here may be quoted as
-  cross-platform verified - `docs/roadmap/CURRENT_STATUS.md` names each one.
+  wrapped at 80 columns. Run #4 (`5b047ad`) came back **green on all seven jobs**, which is
+  what confirmed each of those eight on the platform that found it. What that still does not
+  buy: the columns skip the ten `integration` cases, no command has been run by hand on Linux
+  or macOS, and several POSIX behaviours have no assertion behind them at all -
+  `docs/roadmap/CURRENT_STATUS.md` keeps the list.
