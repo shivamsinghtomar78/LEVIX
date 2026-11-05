@@ -49,6 +49,10 @@ pipx inject levix psutil           # or install "levix[all]" for every module
 | `[ai]` | `levix ai` (httpx) |
 | `[secrets]` | OS keyring storage for API keys (keyring) |
 
+`levix music play` with an `http(s)` link instead of a file also needs `[tube]` (for
+yt-dlp) and `ffmpeg` on `PATH`; a file on disk needs neither, because libsndfile decodes
+it in-process.
+
 ## Use
 
 ```bash
@@ -62,6 +66,7 @@ levix hacker matrix
 levix files browse
 levix tube download URL
 levix music play song.wav
+levix music play "https://example.com/song"   # a link needs [tube] + ffmpeg; bars on a TTY
 levix game snake
 levix ai ask "why is my build slow"
 

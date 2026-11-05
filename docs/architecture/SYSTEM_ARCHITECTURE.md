@@ -102,7 +102,7 @@ traceable to code, and the first three are covered by tests.
 | LEVIX → child LEVIX | argv again, never a pickle | `[sys.executable, "-m", "levix", *args]`, or `[sys.executable, *args]` when `sys.frozen` |
 | LEVIX → third-party tool | argument list | `shutil.which` first, then `subprocess.run(argv, shell=False, check=False)` |
 | LEVIX → disk | five platform directories | `Paths`, overridable by `LEVIX_HOME` and `LEVIX_{CONFIG,DATA,CACHE,STATE,LOG}_DIR` |
-| LEVIX → network | only three places | `update_cmd.py` (pypi.org JSON), `ai/core.py` (configured provider), `tube/core.py` (yt-dlp) |
+| LEVIX → network | four places, three of them a module's own | `update_cmd.py` (pypi.org JSON), `ai/core.py` (configured provider), `tube/core.py` (yt-dlp), `music/core.py` (yt-dlp, only when `play` is handed an `http(s)` link) |
 
 ## 5. Process and thread model
 
@@ -112,7 +112,7 @@ Single process per command, one-shot, no daemon, no background jobs.
 |-----------|----------|
 | Dashboard + module | Textual `App.suspend()` releases the TTY, `spawn.run` blocks, the app resumes and calls `refresh_history()` |
 | Textual workers | `Database.connect()` opens a short-lived connection per call because sqlite3 forbids sharing a connection across threads |
-| Streaming | yt-dlp progress hooks and `rich.live.Live` run on the main thread; no thread is created by LEVIX code |
+| Streaming | yt-dlp progress hooks and `rich.live.Live` run on the main thread; no thread is *created* by LEVIX code. `music` is the one place code runs on a thread it does not own: PortAudio invokes `core.play_samples`'s callback - and through `on_block` the spectrum's FFT and its `Live` update - on PortAudio's audio thread, while the main thread sleeps in a `while stream.active` loop. That is why the redraw is gated to `visual.FPS` and the band mapping is cached |
 | Interrupts | `KeyboardInterrupt` → `main.py` writes `\ninterrupted\n` and returns 130; click's `Abort` maps to the same code |
 
 ## 6. Build and packaging

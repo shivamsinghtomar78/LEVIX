@@ -84,7 +84,7 @@ video titles. Consequently:
 | No renderer embeds a box-drawing character directly | `active_glyphs()`, `@lru_cache(maxsize=1)` |
 | No progress bar is built by hand | `bar(percent, width=20)` with thresholds at 60% and 85% |
 | Text from outside the terminal is adapted before printing | `encode_safe()`: control characters become `\xNN`, unencodable characters are backslash-replaced, everything is forced onto one line |
-| Rich markup in foreign text is inert | `terminal.markup_safe()` is `escape(str(value))`; each module wraps it with the encoding half in its own render helper — `_show` (`tube/cli.py:38`, `hacker/cli.py:33`, `music/cli.py:105`, `ai/cli.py:58`), `show` (`files/cli.py:49`), `terminal.markup_safe` directly in systempulse, `plugins_cmd` and the dashboard — and `main._plain` (`main.py:108-124`) escapes error text line by line |
+| Rich markup in foreign text is inert | `terminal.markup_safe()` is `escape(str(value))`; each module wraps it with the encoding half in its own render helper — `_show` (`tube/cli.py:38`, `hacker/cli.py:33`, `music/cli.py:112`, `ai/cli.py:58`), `show` (`files/cli.py:49`), `terminal.markup_safe` directly in systempulse, `plugins_cmd` and the dashboard — and `main._plain` (`main.py:108-124`) escapes error text line by line |
 | Raw ANSI is only emitted after the console has been asked for VT | `_windows_vt_enabled()` sets `ENABLE_VIRTUAL_TERMINAL_PROCESSING` (`0x0004`) and never raises |
 
 ## Dependency gate

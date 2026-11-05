@@ -3,10 +3,11 @@
 Written against the 0.4.0 tree as it stands. The hand verification behind every line is
 Windows 11 with Python 3.12.10. GitHub Actions now executes the non-integration suite on
 Ubuntu and macOS too; its third run failed eight test functions that depend on the machine
-they run on, all eight were fixed, and its **fourth run (`5b047ad`), fifth (`75daed2`) and
-sixth (`3d460df`) are each green on all seven
+they run on, all eight were fixed, and its **fourth run (`5b047ad`), fifth (`75daed2`),
+sixth (`3d460df`) and eighth (`b748591`) are each green on all seven
 jobs**. So a story marked `Satisfied today` is a cross-platform result for the cases CI runs
-and still a Windows-only result for the ten `integration` cases and for anything a runner
+and still a Windows-only result for the ten `integration` cases, for the 81 stream-visualiser
+cases that landed after `b748591`, and for anything a runner
 never asserts. Run #6 is also the first that executed the POSIX file-mode cases of
 `tests/test_secrets.py` on Linux and macOS rather than skipping them here.
 `Satisfied today` names commands read in `src/levix`; `Verified by` names tests collected in
@@ -174,27 +175,43 @@ it stays predictable and inside site terms.
   which the suite substitutes, so live downloads, live playback and the macOS/Linux advice strings
   are unproven on this machine.
 
-## US-08 — Local audio with no ffmpeg dependency (DEV)
+## US-08 — Audio decoded in-process, from a file or one pasted link (DEV)
 
-As a developer I want WAV, FLAC, OGG and MP3 decoded and played in-process, plus a library scan and
-a stored playlist, so that audio works on a machine that has never heard of ffmpeg.
+As a developer I want WAV, FLAC, OGG, Opus, MP3, AIFF and AU decoded and played in-process, plus a library scan,
+a stored playlist and spectrum bars while it plays, so that audio works on a machine that has never heard of ffmpeg -
+and so that the one thing I pasted instead of a path still plays.
 
-- Satisfied today: `music play FILE [--device/-d N] [--rate/-r Hz] [--volume/-v 0.0-1.0]
-  [--block N]`, `info FILE`, `devices [--kind all|output|input]`,
+- Satisfied today: `music play SOURCE [--device/-d N] [--rate/-r Hz] [--volume/-v 0.0-1.0]
+  [--block N] [--visual bar|off]`, `info FILE`, `devices [--kind all|output|input]`,
   `library [--root DIR] [--suffix EXT] [--limit/-n N] [--include-hidden]`,
   `playlist list|add|remove|clear|play` (`modules/music/cli.py`). Decoding is soundfile/libsndfile,
-  output is sounddevice/PortAudio, `core.py` uses `numpy` directly, and nothing shells out
-  (`modules/music/__init__.py:1-10`). Bad `--volume` is exit 5 with the `levix config set
-  music.volume 0.8` remedy; bad `--rate` is exit 2; an undecodable file is exit 7 naming
-  libsndfile; Ctrl+C is exit 130 and says the device is free; an unset `music.library_dir` is exit 5
+  output is sounddevice/PortAudio, `numpy` is imported inside the functions that move samples, and
+  nothing shells out for a file on disk (`modules/music/__init__.py:1-13`). `SOURCE` may also be an
+  `http(s)` link: yt-dlp fetches the best audio-only stream, ffmpeg converts it inside yt-dlp's own
+  postprocessor, and the result goes to the same libsndfile decode - cached under
+  `<cache_dir>/streams/<sha256(url)[:16]>/audio.mp3`, so the same link never downloads twice. Bad
+  `--volume` is exit 5 with the `levix config set music.volume 0.8` remedy; bad `--rate` is exit 2;
+  an undecodable file is exit 7 naming libsndfile; a link whose scheme is not `http`/`https` is exit 2,
+  decided before either tool is looked for; a missing yt-dlp or ffmpeg for a link is exit 3 naming where
+  each comes from; a fetch that fails is exit 8 with the tool's own reason inside the one message; Ctrl+C
+  is exit 130 and says the device is free; an unset `music.library_dir` is exit 5
   naming both the key and `--root`; playlist rows live in the shared SQLite database and `clear`
   needs a terminal.
-- Verified by: `tests/modules/test_music.py` (57, incl. `test_a_bad_volume_flag_exits_five`,
+- Verified by: `tests/modules/test_music.py` (104 functions, 155 collected, incl.
+  `test_a_bad_volume_flag_exits_five`,
   `test_play_of_an_undecodable_file_exits_seven`, `test_ctrl_c_during_playback_exits_130_and_says_the_device_is_free`,
   `test_an_unset_library_says_so_instead_of_printing_nothing`, `test_playlist_commands_round_trip_through_the_cli`,
-  `test_importing_the_manifest_pulls_in_no_audio_libraries`).
-- Needs hardware: one test, `test_zero_five_seconds_of_a_real_tone_reaches_a_real_output_device`
-  (marked `integration`), requires a real output device.
+  `test_importing_the_manifest_pulls_in_no_audio_libraries`,
+  `test_every_container_the_scan_offers_decodes_here`, `test_a_link_is_fetched_into_the_cache_and_played`,
+  `test_playing_the_same_link_twice_never_reaches_the_network`,
+  `test_a_reported_path_outside_the_url_folder_is_not_opened`, `test_yt_dlp_failing_becomes_one_clean_message`,
+  `test_the_spectrum_draws_from_the_frames_at_the_playhead`).
+- Needs hardware: three tests, `test_zero_five_seconds_of_a_real_tone_reaches_a_real_output_device`
+  plus the two that ask PortAudio which devices exist (all marked `integration`), need real audio
+  hardware.
+- Not done here: no real YouTube page was fetched for the record (the suite drives a fake yt-dlp and the
+  build makes no network requests), the stream cache is never pruned, and a playlist entry is still a file
+  path - `playlist add` refuses a link.
 
 ## US-09 — Watch the machine and trust what it cannot read (DEV)
 

@@ -252,7 +252,7 @@ Common symptoms:
 
 ## Tests
 
-`tests/modules/test_hacker.py` - 52 test functions, 78 collected cases on Windows, the extra
+`tests/modules/test_hacker.py` - 53 test functions, 79 collected cases on Windows, the extra
 cases coming from five parametrised sets (invalid scene configurations, MAC spellings,
 netmask forms, address shapes, out-of-range effect flags).
 

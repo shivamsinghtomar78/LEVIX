@@ -17,13 +17,25 @@ is Windows `icacls`, and only to set an owner-only ACL on LEVIX's *own* secrets
 file (`src/levix/secrets.py::_harden`). Every subprocess uses an argument list
 with `shell=False`; no command string is ever re-parsed.
 
+One boundary is worth naming, because it is easy to read this rule too widely. With
+`levix music play URL` ffmpeg *does* run as a child process - but it is spawned by
+yt-dlp's own postprocessor, from options this module built and no command line LEVIX
+assembled (`music/core.py::_stream_options`). The argument-list rule governs every
+subprocess LEVIX itself starts; the conversion subprocess belongs to yt-dlp, and what
+prompts it is the `FFmpegExtractAudio` postprocessor in those options.
+
 ## ffmpeg
 
 - **Used for**: merging separate video+audio streams and audio conversion in
-  `levix tube`. Never used by `levix music` - libsndfile decodes in-process.
+  `levix tube`, and the conversion step of `levix music play URL` - yt-dlp's own
+  `FFmpegExtractAudio` postprocessor, because libsndfile refuses the container an
+  audio-only stream lands in. A **file on disk is never converted**: libsndfile decodes
+  it in-process and no ffmpeg is involved on that path. LEVIX builds no ffmpeg command
+  line for either module.
 - **Detection**: `shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")`
-  (`tube/core.py::ffmpeg_path`). The capabilities probe (`capabilities.py`)
-  reports OK with the resolved path, or MISSING with "not on PATH".
+  (`tube/core.py::ffmpeg_path`, and the same two names in `music/core.py::ffmpeg_path`).
+  The capabilities probe (`capabilities.py`) reports OK with the resolved path, or
+  MISSING with "not on PATH".
 - **When missing**:
   - `levix tube info` still works; it prints the note "ffmpeg is not installed,
     so merging separate video and audio streams and audio conversion are both
@@ -34,7 +46,14 @@ with `shell=False`; no command string is ever re-parsed.
     `--convert-to`, hits the gate `core.ensure_ffmpeg` **before any request is
     made** and exits **7** (`ExternalToolError`) with the message "this request
     needs ffmpeg to ... and ffmpeg is not installed" and the fix command.
-- **Per-platform install advice** (`tube/core.py::FFMPEG_INSTALL_COMMANDS`):
+  - `levix music play <http(s) link>` hits `core.require_stream_tools` and exits **3**
+    (`DependencyError`) naming this platform's install command, because the stream needs
+    converting before libsndfile can read it. The gate is on the branch that downloads:
+    a cached link and a file on disk answer without looking for ffmpeg at all.
+- **Per-platform install advice** (`tube/core.py::FFMPEG_INSTALL_COMMANDS`, duplicated
+  deliberately in `music/core.py` because official modules do not import each other, and
+  `tests/modules/test_music.py::test_the_ffmpeg_advice_does_not_drift_from_tubes` fails
+  if the two tables ever disagree):
   - Windows (`win32`, and `cygwin`): `winget install Gyan.FFmpeg`
   - macOS (`darwin`): `brew install ffmpeg`
   - Everything else (fallback): `sudo apt install ffmpeg`
@@ -77,15 +96,18 @@ with `shell=False`; no command string is ever re-parsed.
 
 ## libsndfile
 
-- **Used for**: decoding WAV, FLAC, OGG, MP3 and friends in `levix music`.
+- **Used for**: decoding every container `levix music` plays - WAV, FLAC, OGG (Vorbis
+  and Opus), MP3, AIFF under both `.aiff` and `.aif`, and AU - in-process. A stream
+  fetched from a URL arrives as an MP3 this decoder does carry, which is the only
+  reason the URL path converts at all.
 - **Delivery**: **bundled inside the `soundfile` wheel** (0.14.0 installed); the
   decoder actually in use is reported by `levix music info` via
   `core.decoder_version()` ("soundfile <ver> / libsndfile <ver>").
 - **When a codec is missing** (e.g. `.m4a`, `.mp4`, `.aac`, `.wma`, `.mkv`,
   `.ape`, `.mid`): exit **7** (`UnsupportedFormatError`) naming the codec, with
-  the message stating explicitly that "LEVIX never calls ffmpeg, so there is no
-  fallback to enable". A codec it does not carry is reported as missing, never
-  faked.
+  the hint stating explicitly that "a file on this disk is never converted - only a
+  fetched URL goes through ffmpeg". A codec it does not carry is reported as missing,
+  never faked.
 
 ## Ollama (local AI server)
 
@@ -114,4 +136,7 @@ yt-dlp (2026.10.26), rich, textual, typer, tomlkit, platformdirs, keyring,
 httpx, numpy and psutil are Python dependencies, not external tools: they run in
 -process, are version-pinned in `pyproject.toml`, and their absence is a missing
 **extra**, reported with exit **3** and the exact `pip install "levix[...]"`
-line - never an `ImportError`. See `docs/technology/DEPENDENCIES.md`.
+line - never an `ImportError`. See `docs/technology/DEPENDENCIES.md`. yt-dlp is the
+one of these two modules reach for: `levix tube` always, `levix music` only when
+`play` is handed an `http(s)` link, and each module has exactly one function that
+imports it (`_make_ydl`).

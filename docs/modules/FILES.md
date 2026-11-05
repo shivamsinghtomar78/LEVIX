@@ -303,9 +303,10 @@ lines; only the control characters *inside* a line become `\xNN`.
 
 ## Tests
 
-`tests/modules/test_files.py` - 121 test functions, 147 collected cases on Windows: three
-parametrised sets (`human_bytes`, `count_lines`, and the 12/20-entry `DANGEROUS` name list,
-which grows on Windows) and three `@pytest.mark.integration` Textual Pilot tests.
+`tests/modules/test_files.py` - 123 test functions, 153 collected cases on Windows: four
+parametrised sets (5 `human_bytes`, 5 `count_lines`, 5 device-prefix forms including the
+`\\?\` and `\??\` prefixes Windows really stores in a link, and the 12/19-entry `DANGEROUS`
+name list, which grows on Windows) and three `@pytest.mark.integration` Textual Pilot tests.
 
 What they pin down:
 

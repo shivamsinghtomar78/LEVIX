@@ -57,7 +57,7 @@ on `importlib.metadata` entry points. The core is six lightweight dependencies
 run time with a message that names the extra. The dashboard is a launcher: it never calls
 module internals, it re-enters `levix <module> …` in a child process with the terminal
 suspended. Commands, modules, errors, exit codes, configuration layering and the
-dependency gate are covered by a 617-function suite that runs without network, without a
+dependency gate are covered by a 664-function suite that runs without network, without a
 real device and without a real terminal.
 
 ## What is built, and how each part is proven
@@ -71,7 +71,7 @@ real device and without a real terminal.
 | Hacker | `…/hacker/` | 53 / 79, OS reporting driven with captured text |
 | SystemPulse (`monitor`) | `…/systempulse/` | 40 / 46 against a psutil stand-in in `sys.modules`, plus five `run_cli` cases against real psutil |
 | AI | `…/ai/` | 82 / 97 against a stubbed httpx transport |
-| Music | `…/music/` | 57 / 74; three cases are marked `integration` and need a machine with sound hardware |
+| Music | `…/music/` | 104 / 155; three cases are marked `integration` and need a machine with sound hardware. The fetch runs against a fake `yt_dlp` in a second seam, so no case contacts a network; the spectrum rules are pure functions in `music/visual.py` |
 | Arcade (`game`) | `…/arcade/` | 39 / 43, rules as pure functions plus Pilot-driven screens |
 | Files | `…/files/` | 123 / 153 in a temporary filesystem |
 | Plugin contract and a real third-party module | `levix.sdk` (14 re-exports), `plugin-examples/hello/` | `tests/test_registry.py` (12), `tests/test_plugin_example.py` (8) which registers the example through a hand-built `dist-info` and runs the real router over it |
@@ -80,15 +80,15 @@ real device and without a real terminal.
 
 ```
 .venv/Scripts/python.exe -m pytest -o addopts="" -q
-617 test functions in 21 files, collecting to 748 parametrised cases
-740 passed, 8 skipped, 2 warnings in 101.57 s   (exit 0)
+664 test functions in 21 files, collecting to 829 parametrised cases
+821 passed, 8 skipped, 2 warnings in 123.32 s   (exit 0)
 ```
 
 The same tree, one process at a time, split the way CI splits it:
 
 ```
--m "not integration"   730 passed, 8 skipped, 10 deselected in 95.72 s   (exit 0)
--m integration         10 passed, 738 deselected, 2 warnings in 10.06 s   (exit 0)
+-m "not integration"   811 passed, 8 skipped, 10 deselected in 100.90 s   (exit 0)
+-m integration         10 passed, 819 deselected, 2 warnings in 10.85 s   (exit 0)
 ```
 
 The `-o addopts=""` clears `-q --strict-markers`; it changes nothing about which cases run,
@@ -101,7 +101,7 @@ because `addopts` deselects no marker.
   the Ubuntu and macOS columns of CI run #6, which is where that half of the claim now comes from.
   Every skip names its reason; none is a silent pass.
 - Ten cases carry `@pytest.mark.integration` (`pytest -m integration` collects exactly
-  `10/748 tests, 738 deselected`). The repository's `addopts` is `-q --strict-markers` and
+  `10/829 tests, 819 deselected`). The repository's `addopts` is `-q --strict-markers` and
   deselects nothing, so the default run above already includes them - among them the real
   audio-device playback test, which skips itself when PortAudio reports no output device.
   Three of the ten ask the operating system which sound hardware it has; CI run #3 moved
@@ -178,11 +178,11 @@ work on the screens has to be verified here, because the runners do not look at 
 | Check | Command | Result on this machine |
 | --- | --- | --- |
 | Lint | `.venv/Scripts/python.exe -m ruff check src tests plugin-examples` | exit 0, "All checks passed!" |
-| Format | `.venv/Scripts/python.exe -m ruff format --check src tests plugin-examples` | exit 0, "84 files already formatted". The same check over `.` is also clean (125 files) because ruff 0.17 formats fenced Python inside Markdown, and this commit reformatted the two ADR snippets that said otherwise (`docs/decisions/ADR-0002…`, `ADR-0003…`) - prose untouched, only the code blocks re-wrapped |
-| Types | `.venv/Scripts/python.exe -m mypy` | exit 0, "no issues found in 61 source files" (`[tool.mypy].files` covers `src/levix` **and** `plugin-examples/hello/src`, so the copy-pasteable plugin is checked with the core). Since run #1, `--platform win32`, `--platform linux` and `--platform darwin` are all run here too, because a Linux runner is what found the one Windows-only attribute the tree had |
+| Format | `.venv/Scripts/python.exe -m ruff format --check src tests plugin-examples` | exit 0, "85 files already formatted" (the 85th is `src/levix/modules/music/visual.py`). The same check over `.` is also clean (126 files) because ruff 0.17 formats fenced Python inside Markdown - prose blocks re-wrap only when a snippet is genuinely mis-wrapped |
+| Types | `.venv/Scripts/python.exe -m mypy` | exit 0, "no issues found in 62 source files" (`[tool.mypy].files` covers `src/levix` **and** `plugin-examples/hello/src`, so the copy-pasteable plugin is checked with the core). Since run #1, `--platform win32`, `--platform linux` and `--platform darwin` are all run here too, because a Linux runner is what found the one Windows-only attribute the tree had; each of the three reports the same 62 clean |
 | Install | `.venv/Scripts/python.exe -m pip install -e ".[dev,all]"` | the only install proven here |
 | Distribution | `python -m build` then install the wheel into an empty venv | sdist + wheel build (66 wheel entries, `levix/py.typed` present, `levix/data/defaults.toml` exactly once); in the clean venv all seven modules answer `-h` with 0, the four heavy ones refuse with 3 naming the right extra, and no heavy package is imported (`CHANGELOG.md` §Verification) |
-| CI | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | **has run seven times, and an eighth is queued on `b748591`.** #1 (`fcbcb22`): the bare-wheel job **passed on Ubuntu** - the first time the extras gate was proven on a platform other than this laptop - and the four POSIX matrix jobs stopped at `Types` on one real cross-platform defect (`st_file_attributes` is Windows-only; `mypy` on a POSIX runner has no stub for it - fixed, and now proven against `--platform win32`, `linux` and `darwin`). #2 (`726909c`) reported "5 successful and 2 failing" and was wrong in both directions: the `Test suite` step piped pytest through `tee` under a shell without `pipefail`, so Linux and macOS went green over a red suite, and both Windows jobs died in pwsh before pytest ran. #3 (`5fdc644`) is the first honest result: **all six columns red, eight test functions between them**, every one of them dependent on the machine it ran on - typer forces a terminal whenever `GITHUB_ACTIONS` is set so the help-page assertions met escape codes, the delete path judged a symlink by its target and refused a safe removal, `os.readlink` returns `\\?\`-prefixed targets on Windows, two tests asked a headless runner about its sound cards, a 68-character macOS runner hostname did not fit the host table's value column, and the AI cap notice wrapped at 80 columns. **#4 (`5b047ad`) is green: run id `42068621524`, all seven jobs `success`, and on each of the six matrix jobs the four steps `Lint`, `Format`, `Types` and `Test suite` individually report `success` - Windows 3.12 and 3.13, Ubuntu 3.12 and 3.13, macOS 3.12 and 3.13 - and the annotation lists hold only GitHub's own `actions/checkout` Node.js-20 deprecation warning plus runner notices, with no `FAILED` line from the suite step. That is the first time this tree has been red-free anywhere other than this laptop, and it confirms all eight fixes on the machines that found them. **#5 (`75daed2`) is green too: run id `42074244730`, all seven jobs `success`, the same four steps individually `success` on all six columns, annotations again only GitHub's Node.js-20 deprecation warning plus the `ubuntu-latest` migration and macOS capacity notices.** Run #5 is the first to carry `tests/test_logging.py`, so `test_a_key_never_reaches_the_log_file` - the only case that opens a real rotating `levix.log` - has now executed on Ubuntu and macOS as well, which is the thing that row was added to find out. **#6 (`3d460df`) is green as well: run id `42078880293`, all seven jobs `success`, and the four steps `Lint`, `Format`, `Types` and `Test suite` individually `success` on every one of the six columns.** Run #6 is the first to carry `tests/test_secrets.py`, whose three POSIX-only cases therefore ran on Ubuntu 3.12, Ubuntu 3.13, macOS 3.12 and macOS 3.13 instead of skipping, and the columns still came back green - the `0600` the `os.open` asks for is now a measured fact about a POSIX filesystem rather than an assertion only this laptop could make. This time the per-job annotations could not be read at all: the attempt ran into the 60-calls-per-hour unauthenticated limit partway through the loop (five `404`s, one `403`, `/rate_limit` then reporting `core.remaining = 0`), so run #6 is recorded from the run conclusion and the step conclusions only. **#7 (`c49d608`, run id `42083876435`) is `failure`, and reading it is the reason §What to do next no longer describes a poll loop**: six of seven jobs `success` - the wheel job, and `Lint`/`Format`/`Types`/`Test suite` individually `success` on Windows 3.12, Windows 3.13, Ubuntu 3.12, Ubuntu 3.13 and macOS 3.13 - while `macos-latest / Python 3.12` is `cancelled` with no runner name and no steps, annotated "The job was not acquired by Runner of type hosted even after multiple attempts", in a run that took 15 m 3 s against the ~6 m of a green one. Nothing in the tree was implicated: GitHub never gave that job a machine. Run #7 is still the first run whose tree carried `tests/test_update.py` and `tests/test_create_module.py`, so those 19 functions and 23 cases executed on five columns - Ubuntu both versions, Windows both versions and macOS 3.13 - and the generator's child-interpreter `pytest` step ran on Linux and macOS for the first time; none of the five reached a failure. Run #8 is queued on `b748591`, the first tree with the hidden-module cases. What the columns do *not* cover: they run `-m "not integration"`, which on run #6's tree was 710 of its 720 cases - and the per-column pass and skip counts were never read, because GitHub answers an unauthenticated `GET /actions/runs/{id}/logs` with 403, so what is known about a column is its step conclusions - plus, for runs #4 and #5, its annotations - and nothing finer. Either way the ten device and OS-tool cases have still only ever run on Windows 11 here; and no column asserts anything about the POSIX items still open in §What is not verified item 1. `release.yml` has **not** run, and it cannot pass until the PyPI project and its trusted publisher exist (`docs/technology/PYTHON_PACKAGING.md` §Publishing) |
+| CI | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | **has run eight times, and the eighth is green.** #1 (`fcbcb22`): the bare-wheel job **passed on Ubuntu** - the first time the extras gate was proven on a platform other than this laptop - and the four POSIX matrix jobs stopped at `Types` on one real cross-platform defect (`st_file_attributes` is Windows-only; `mypy` on a POSIX runner has no stub for it - fixed, and now proven against `--platform win32`, `linux` and `darwin`). #2 (`726909c`) reported "5 successful and 2 failing" and was wrong in both directions: the `Test suite` step piped pytest through `tee` under a shell without `pipefail`, so Linux and macOS went green over a red suite, and both Windows jobs died in pwsh before pytest ran. #3 (`5fdc644`) is the first honest result: **all six columns red, eight test functions between them**, every one of them dependent on the machine it ran on - typer forces a terminal whenever `GITHUB_ACTIONS` is set so the help-page assertions met escape codes, the delete path judged a symlink by its target and refused a safe removal, `os.readlink` returns `\\?\`-prefixed targets on Windows, two tests asked a headless runner about its sound cards, a 68-character macOS runner hostname did not fit the host table's value column, and the AI cap notice wrapped at 80 columns. **#4 (`5b047ad`) is green: run id `42068621524`, all seven jobs `success`, and on each of the six matrix jobs the four steps `Lint`, `Format`, `Types` and `Test suite` individually report `success` - Windows 3.12 and 3.13, Ubuntu 3.12 and 3.13, macOS 3.12 and 3.13 - and the annotation lists hold only GitHub's own `actions/checkout` Node.js-20 deprecation warning plus runner notices, with no `FAILED` line from the suite step. That is the first time this tree has been red-free anywhere other than this laptop, and it confirms all eight fixes on the machines that found them. **#5 (`75daed2`) is green too: run id `42074244730`, all seven jobs `success`, the same four steps individually `success` on all six columns, annotations again only GitHub's Node.js-20 deprecation warning plus the `ubuntu-latest` migration and macOS capacity notices.** Run #5 is the first to carry `tests/test_logging.py`, so `test_a_key_never_reaches_the_log_file` - the only case that opens a real rotating `levix.log` - has now executed on Ubuntu and macOS as well, which is the thing that row was added to find out. **#6 (`3d460df`) is green as well: run id `42078880293`, all seven jobs `success`, and the four steps `Lint`, `Format`, `Types` and `Test suite` individually `success` on every one of the six columns.** Run #6 is the first to carry `tests/test_secrets.py`, whose three POSIX-only cases therefore ran on Ubuntu 3.12, Ubuntu 3.13, macOS 3.12 and macOS 3.13 instead of skipping, and the columns still came back green - the `0600` the `os.open` asks for is now a measured fact about a POSIX filesystem rather than an assertion only this laptop could make. This time the per-job annotations could not be read at all: the attempt ran into the 60-calls-per-hour unauthenticated limit partway through the loop (five `404`s, one `403`, `/rate_limit` then reporting `core.remaining = 0`), so run #6 is recorded from the run conclusion and the step conclusions only. **#7 (`c49d608`, run id `42083876435`) is `failure`, and reading it is the reason §What to do next no longer describes a poll loop**: six of seven jobs `success` - the wheel job, and `Lint`/`Format`/`Types`/`Test suite` individually `success` on Windows 3.12, Windows 3.13, Ubuntu 3.12, Ubuntu 3.13 and macOS 3.13 - while `macos-latest / Python 3.12` is `cancelled` with no runner name and no steps, annotated "The job was not acquired by Runner of type hosted even after multiple attempts", in a run that took 15 m 3 s against the ~6 m of a green one. Nothing in the tree was implicated: GitHub never gave that job a machine. Run #7 is still the first run whose tree carried `tests/test_update.py` and `tests/test_create_module.py`, so those 19 functions and 23 cases executed on five columns - Ubuntu both versions, Windows both versions and macOS 3.13 - and the generator's child-interpreter `pytest` step ran on Linux and macOS for the first time; none of the five reached a failure. **#8 (`b748591`, run id `42089712550`) is green: all seven jobs `success`, `Lint`/`Format`/`Types`/`Test suite` individually `success` on all six columns - Windows 3.12 and 3.13, Ubuntu 3.12 and 3.13, and macOS 3.12 and 3.13 both with a named hosted runner - the wheel job's six named steps (`Build the distribution` through `The stdlib-only modules and the platform commands still work`) `success`, and the per-job `annotations` arrays empty this time.** Run #8 is the first tree with the hidden-module cases, and it carries `tests/test_secrets.py`, so that file's three POSIX cases ran on all four POSIX columns rather than skipping; the macOS 3.12 column that run #7 lost to runner starvation is the one that came back here, which is the whole difference between a `failure` conclusion and a `success` one on this project's matrix. What the columns do *not* cover: they run `-m "not integration"`, which was 710 of run #6's 720 cases, 738 of run #8's 748 and is 819 of this tree's 829 - and the per-column pass and skip counts were never read, because GitHub answers an unauthenticated `GET /actions/runs/{id}/logs` with 403, so what is known about a column is its step conclusions - plus, for runs #4, #5 and #8, their annotations - and nothing finer. Either way the ten device and OS-tool cases, and the 81 stream-visualiser cases that landed after `b748591`, have only ever run on Windows 11 here; and no column asserts anything about the POSIX items still open in §What is not verified item 1. `release.yml` has **not** run, and it cannot pass until the PyPI project and its trusted publisher exist (`docs/technology/PYTHON_PACKAGING.md` §Publishing) |
 | Doctor | `levix doctor --json` | verdict `degraded`, exit 0; capabilities `ffmpeg`, `media_player`, `audio_output`, `psutil`, `battery`, `keyring`, `platform` are `ok`; `temperature` `degraded` (this psutil has no `sensors_temperatures`), `gpu` `unsupported`, `terminal` `degraded` (stdout not a TTY) |
 | Update check | `levix update` | exit 8, `could not check for updates: PyPI returned 404` - the name is unclaimed, and the command refuses to imply "up to date" when it could not ask |
 
@@ -258,13 +258,22 @@ says exactly what closed each row.
    `approve.py:51-59` is covered only by the pipe refusal.
 4. **Sound and video.** Audible playback is the `integration` device test. `ffmpeg`,
    `ffprobe` and `ffplay` are installed on this machine and probe `ok`, but merged-stream
-   download and `--convert-to` were never run against a real URL.
-5. **Any network call.** No test reached a site: Tube's `_make_ydl` seam is replaced, AI's
+   download and `--convert-to` were never run against a real URL. Nor was a fetched stream ever
+   *heard*: what the loopback run below exercised is the failure path, and the spectrum bars are
+   asserted as numbers (`music/visual.py`) and as a flag-and-config gate - never as rendered
+   frames, because no case runs the `Live` renderer with a terminal attached
+   (`docs/modules/MUSIC.md` gap 11).
+5. **Any network call.** No test reached a site: Tube's `_make_ydl` seam is replaced, Music's
+   own `core._make_ydl` seam is replaced the same way for `music play <url>`, AI's
    transport is stubbed, and `levix update` is now pinned by `tests/test_update.py` against a
    fake `urllib.request.urlopen` - which proves the parsing, the comparison, the exit codes and
    the request shape, and proves nothing about what `pypi.org/pypi/levix/json` actually answers.
    The hand run still says `PyPI returned 404`, because the name is unclaimed.
-   `levix ai` has never spoken to a real model server.
+   `levix ai` has never spoken to a real model server. The one real outbound attempt made for the
+   record was `levix music play http://127.0.0.1:1/tone` - yt-dlp, ffmpeg on `PATH`, a closed
+   port on the loopback interface - which took about 3.8 s, printed one message and exited 8;
+   that pins the failure mapping and the one-report rule and says nothing about any site
+   (`docs/modules/MUSIC.md` gap 8).
 6. **Redaction outside the four patterns.** `tests/test_logging.py` (6 functions, 11 cases)
    now pins what `RedactFilter` promises - bearer header, `sk-…`, `ghp_`-shaped token,
    `key=value` where the key says `api_key`/`token`/`secret`/`password` - including that a key
@@ -299,10 +308,10 @@ says exactly what closed each row.
    `tests/test_registry.py::test_a_module_hidden_from_the_dashboard_is_still_discovered_and_routable`
    are the proof. Deleting a field from `levix.sdk` is safe only because nothing has been
    published yet - see item 10 and `docs/technology/PYTHON_PACKAGING.md` §Publishing.
-10. **A release, and a green run of the whole suite off this laptop.** Runs #4, #5 and #6 are green
-    on all six columns, so the eight machine-dependent fixes are confirmed, the redaction tests
-    and the three POSIX permission cases have executed on Linux and macOS; but each column runs
-    `-m "not integration"`, so what Linux and macOS have never executed is the ten device and
+10. **A release, and a green run of the whole suite off this laptop.** Runs #4, #5, #6 and #8 are
+    green on all six columns, so the eight machine-dependent fixes are confirmed, the redaction
+    tests and the three POSIX permission cases have executed on Linux and macOS; but each column
+    runs `-m "not integration"`, so what Linux and macOS have never executed is the ten device and
     OS-tool cases - the full suite has still never run outside this laptop.
     `release.yml` has **not**
     run, and it cannot pass until the PyPI project and its trusted publisher exist
@@ -324,19 +333,21 @@ says exactly what closed each row.
 
 ## What to do next, in order
 
-1. Read CI run #8 (queued on `b748591`, pushed 2026-11-05): it is the first run that executes the
-   hidden-module cases (`tests/test_dashboard.py::test_a_module_hidden_from_the_dashboard_gets_no_row`,
+1. Read CI run #9 once it has finished - the first tree that carries the 81 stream-visualiser
+   cases, which is this page's tree. Run #8 (`b748591`, run id `42089712550`) is already read and
+   is green on all seven jobs, so the hidden-module cases
+   (`tests/test_dashboard.py::test_a_module_hidden_from_the_dashboard_gets_no_row`,
    `::test_a_hidden_module_reaches_no_widget_the_app_builds`,
    `::test_no_official_module_hides_itself_from_the_dashboard` and
    `tests/test_registry.py::test_a_module_hidden_from_the_dashboard_is_still_discovered_and_routable`)
-   and the first that runs the suite without `registry.build_screen` in it. Read a finished run
-   rather than waiting on one: the unauthenticated API allows 60 calls an hour, and the loop that
-   polled run #7 every 20 seconds spent the whole budget and died on `403 rate limit exceeded`
-   before the run was legible. Run #7 was eventually read that way - two calls, the run and then
-   its job list - and §What is built, and how each part is proven records what those two answers
-   gave, including the macOS column GitHub never gave a runner. Note the shape of that result:
-   a run can end `failure` while every job that actually executed is green, so "the suite is green
-   on CI" needs the job list, not the run badge.
+   and the suite without `registry.build_screen` in it have now executed on six columns.
+   Read a finished run rather than waiting on one: the unauthenticated API allows 60 calls an
+   hour, and the loop that polled run #7 every 20 seconds spent the whole budget and died on
+   `403 rate limit exceeded` before the run was legible. Runs #7 and #8 were each read with two
+   calls - the run list, then the job list - and the CI row of §Static checks records what those
+   answers gave, including the macOS column GitHub never gave a runner in #7
+   and did in #8. Note the shape of that result: a run can end `failure` while every job that
+   actually executed is green, so "the suite is green on CI" needs the job list, not the run badge.
 2. Do the one-time PyPI side that a checkout cannot do: the account with 2FA, the project
    `levix`, the trusted publisher naming this repo + `release.yml` + the `pypi` environment,
    and that environment in GitHub Settings. Then `git tag v0.4.0 && git push origin v0.4.0`,
@@ -349,8 +360,8 @@ says exactly what closed each row.
 ## How to reproduce the numbers in this page
 
 ```bash
-.venv/Scripts/python.exe -m pytest -o addopts="" -q              # the suite, all 748 cases
-.venv/Scripts/python.exe -m pytest -o addopts="" -q -m "not integration"   # the 738 CI runs
+.venv/Scripts/python.exe -m pytest -o addopts="" -q              # the suite, all 829 cases
+.venv/Scripts/python.exe -m pytest -o addopts="" -q -m "not integration"   # the 819 CI runs
 .venv/Scripts/python.exe -m pytest -o addopts="" -q -m integration         # just the 10 device/OS cases
 .venv/Scripts/python.exe -m ruff check src tests plugin-examples        # lint
 .venv/Scripts/python.exe -m ruff format --check src tests plugin-examples  # format
@@ -362,7 +373,7 @@ Four of those lines are `.github/workflows/ci.yml`'s `suite` job - `Lint`, `Form
 `Test suite` - and the `Test suite` step is the `-m "not integration"` line; the bare run and the
 `-m integration` line are how this machine covers the ten cases the matrix deselects.
 The repository's `addopts = "-q --strict-markers"` deselects no marker, so an unmodified
-`pytest` is the full 748 cases here; a job that must not touch a device or an OS tool has to
+`pytest` is the full 829 cases here; a job that must not touch a device or an OS tool has to
 say `-m "not integration"` explicitly rather than assume the config does it. `-o addopts=""`
 is in the lines above because adding `-q` to the config's own `-q` gives `-qq`, which prints
 progress but no summary line - the numbers in this page would otherwise be unrepeatable.

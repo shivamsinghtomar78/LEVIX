@@ -127,7 +127,7 @@ def _audio() -> ProbeResult:
     return ProbeResult(
         "audio_output",
         Status.OK,
-        "sounddevice (PortAudio) + soundfile (libsndfile) bundled, no system ffmpeg required",
+        "sounddevice (PortAudio) + soundfile (libsndfile) bundled; a file on disk needs no ffmpeg",
     )
 
 

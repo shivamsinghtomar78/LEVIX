@@ -47,7 +47,7 @@ a name in the public façade that no loader reads is an affordance that quietly 
 | 4 | Third-party imports live behind exactly one seam, and that seam is a function | testability: a stub replaces one function instead of monkeypatching a module | `_make_ydl`, `build_client`, `play_samples`, `inspect_file`/`load` |
 | 5 | `core.py` returns plain data and raises only `levix.sdk` errors | every rule is unit-testable without a console | `files/core.py:1-22` states it; `tube/core` returns frozen dataclasses |
 | 6 | `cli.py` owns rendering | — | all seven |
-| 7 | Dynamic text is escaped before printing | Rich eats `[abcdef]` in a real file name or title as a style tag, a `[/...]` raises `MarkupError` and the command dies, and a cp1252 console raises on an emoji | `_show` (`tube/cli.py:38`, `hacker/cli.py:33`, `music/cli.py:105`, `ai/cli.py:58`), `show` (`files/cli.py:49`), `_clip` (`music/cli.py:122`), `terminal.markup_safe` in systempulse, `plugins_cmd` and the dashboard, `main._plain` (`main.py:108-124`). Arcade prints only values LEVIX itself wrote |
+| 7 | Dynamic text is escaped before printing | Rich eats `[abcdef]` in a real file name or title as a style tag, a `[/...]` raises `MarkupError` and the command dies, and a cp1252 console raises on an emoji | `_show` (`tube/cli.py:38`, `hacker/cli.py:33`, `music/cli.py:112`, `ai/cli.py:58`), `show` (`files/cli.py:49`), `_clip` (`music/cli.py:130`), `terminal.markup_safe` in systempulse, `plugins_cmd` and the dashboard, `main._plain` (`main.py:108-124`). Arcade prints only values LEVIX itself wrote |
 | 8 | No shell strings | invariant 5 of `SYSTEM_ARCHITECTURE.md` | `tube/core.player_command` + `launch`, `hacker/core.run_tool`, `ai/core.run_proposal` |
 | 9 | Unknown is rendered as unknown | a `0` where a site reported nothing is a lie about the data | `tube/core.summarize` and `_format_row` use `"-"`/`"not reported"` |
 | 10 | SQLite access goes through the shared `Database` and a registered migration | `_levix_schema` stays truthful for `doctor` | `music/core.ensure_schema`, `arcade/scores.register_migration` |
@@ -58,7 +58,7 @@ a name in the public façade that no loader reads is an affordance that quietly 
 |--------|---------------|----------|---------------------------------|
 | tube | `yt_dlp` | inside `_make_ydl` (`core.py:251`) | clean exit 3 with `pip install "levix[tube]"` |
 | monitor | `psutil` | inside each of eight functions (`core.py:70…269`) | clean exit 3 |
-| music | `soundfile`, `sounddevice`, `numpy` | inside the functions that decode, play or move samples (`core.py:248,265,300,312,353,420,421,478`); `numpy` appears only under `TYPE_CHECKING` at module level (`core.py:33`) | clean exit 3 |
+| music | `soundfile`, `sounddevice`, `numpy`, `yt_dlp` | inside the functions that decode, play or move samples (`core.py:343,360,395,407,448,815,816,873`), and inside `_make_ydl` (`core.py:667`) for the one source that is a link; `numpy` appears only under `TYPE_CHECKING` at module level (`core.py:50`) | clean exit 3 - and a URL missing yt-dlp is exit 3 naming `levix[tube]`, which is where it comes from |
 | ai | `httpx` | inside the five request functions (`core.py:807,819,874,907,939`); `TYPE_CHECKING`-only at module level (`core.py:36`) | clean exit 3 |
 | arcade, files, hacker | none (stdlib + Textual) | Textual inside `screens.py`/`browse.py`, but those files are imported inside a command body | `levix game -h` and `levix files -h` never import Textual |
 
@@ -91,7 +91,7 @@ comment in each `core.py` records that.
 | 15 | `tube/cli.py:212-214` | the chosen directory and source are printed through `_show`; `--playlist` prints `PLAYLIST_WARNING` |
 | 16 | `tube/core.py:214` | `build_options(plan, output_dir=…, playlist=…, allow_file_url=…)` — see the table below |
 | 17 | `tube/cli.py:220-221` | a `rich.live.Live` progress hook is appended to `options["progress_hooks"]` |
-| 18 | `tube/core.py:282` | `fetch(url, options)` → `_make_ydl(options)` → the only `import yt_dlp` → `extract_info(url, download=True)` |
+| 18 | `tube/core.py:282` | `fetch(url, options)` → `_make_ydl(options)` → Tube's only `import yt_dlp` → `extract_info(url, download=True)` (Music keeps its own single seam, `music/core.py:667`, for `play URL`) |
 | 19 | `tube/core.py:273` | any yt-dlp exception that is not a `LevixError` becomes `ProviderError` (exit 8), with a `--allow-file-url` hint when yt-dlp says "file:// URLs are disabled". `KeyboardInterrupt` is a `BaseException`, so Ctrl+C still reaches `main.py`'s exit-130 path |
 | 20 | `tube/cli.py:229` | `_report_download` prints the summary; a non-terminal console gets a blank line first so the final progress frame and the summary do not collide |
 
@@ -126,7 +126,7 @@ circumvention, no cookie extraction, no account abuse."
 | hacker | `core.py` (1612), `cli.py` (543) | `run_tool(argv, …)` with `shutil.which`, `shell=False`, timeout 8.0 (`hacker/core.py:280`) | none | nothing; reads `hosts`, `resolv.conf`, `nsswitch.conf`, capped at `MAX_READ_BYTES = 262_144` (`hacker/core.py:1070`) |
 | files | `core.py` (983), `cli.py` (538), `browse.py` (429) | stdlib only; Textual inside `browse` | `FilesError` (1), `UnsafePathError` (2), `RequestError` (2) | disk, behind the path wall and `require_approval` |
 | arcade (`game`) | `scores.py` (211), `snake.py` (230), `tetris.py` (355), `screens.py` (312), `cli.py` (383) | none: rules are pure functions of state plus an explicit RNG | `ArcadeError` (1), `ArcadeUsage` (2) | `levix_arcade_score` |
-| music | `core.py` (699), `cli.py` (485) | `soundfile` in `inspect_file`/`load`, `sounddevice` in `play_samples` | `MusicError` (1), `RequestError` (2), `BackendError` (7), `UnsupportedFormatError`, `AudioDeviceError` | `music_playlist` |
+| music | `core.py` (1094), `cli.py` (632), `visual.py` (245) | `soundfile` in `inspect_file`/`load`, `sounddevice` in `play_samples`, `yt_dlp` in `_make_ydl` | `MusicError` (1), `RequestError` (2), `DependencyError` (3), `BackendError` (7), `ProviderError` (8), `UnsupportedFormatError`, `AudioDeviceError` | `music_playlist`, plus `<cache_dir>/streams/…` for a fetched link |
 | ai | `core.py` (972), `cli.py` (594) | `httpx.Client` in `build_client` | uses `levix.errors` directly | nothing; a proposal runs only via `run_proposal` |
 
 Every module reads configuration through the forwarded `LevixContext` rather than a
@@ -176,14 +176,14 @@ template.
 
 - **The gate no longer says "no install hint is declared" for official modules.** Each
   `cli.py::_gate` now calls `deps.gate(MANIFEST)` (`ai/cli.py:52-55`, `arcade/cli.py:44-47`,
-  `files/cli.py:43-46`, `hacker/cli.py:64-67`, `music/cli.py:41-44`,
+  `files/cli.py:43-46`, `hacker/cli.py:64-67`, `music/cli.py:46-49`,
   `systempulse/cli.py:26-29`, `tube/cli.py:49-52`), and `gate()` resolves the manifest
   through `registry.active().get(name)` before checking
   (`deps.py:135-147`), so it sees the stamped copy whose `origin` makes
   `resolved_install_hint()` produce `pip install "levix[<extra>]"`. With `yt_dlp` blocked,
   `levix tube info …` now prints that pip line; `tests/test_deps.py` covers both the
   official and the third-party path.
-- **The seam rule is uniform.** `numpy` (`music/core.py:33`) and `httpx`
+- **The seam rule is uniform.** `numpy` (`music/core.py:50`) and `httpx`
   (`ai/core.py:36`) are `TYPE_CHECKING`-only at module scope and imported inside the
   functions that use them, so a core install without the extras gives exit 3 with the pip
   line rather than an exit-1 traceback - proven for all seven modules by

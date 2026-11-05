@@ -31,8 +31,8 @@ and others. They are what Rich/Textual/httpx pull in.
 | Extra | Declared pins | Installed | Licence | Notes |
 |---|---|---|---|---|
 | `[monitor]` | `psutil>=7.2,<8` | 7.2.2 | BSD-3-Clause (verified here) | systempulse module |
-| `[tube]` | `yt-dlp>=2026.10.26` (no upper bound) | 2026.10.26 | Unlicense (verified here) | imported only inside `tube/core.py::_make_ydl` |
-| `[music]` | `sounddevice>=0.5,<1`, `soundfile>=0.14,<1`, `numpy>=2.0,<3` | 0.5.6, 0.14.0, 2.5.4 | sounddevice MIT (verified here); soundfile metadata reads **"BSD 3-Clause License"** (verified here) - contradicts the "MIT" note carried in earlier repo work; not re-verified against upstream licence text; numpy not re-verified here | bundles PortAudio and libsndfile respectively. numpy is declared because `music/core.py` imports it directly, inside the functions that need samples, not at module scope |
+| `[tube]` | `yt-dlp>=2026.10.26` (no upper bound) | 2026.10.26 | Unlicense (verified here) | imported inside `tube/core.py::_make_ydl`, and inside `music/core.py::_make_ydl` when - and only when - `levix music play` is handed an `http(s)` link. Music declares no extra of its own for it: the message names `levix[tube]`, because that is where it comes from |
+| `[music]` | `sounddevice>=0.5,<1`, `soundfile>=0.14,<1`, `numpy>=2.0,<3` | 0.5.6, 0.14.0, 2.5.4 | sounddevice MIT (verified here); soundfile metadata reads **"BSD 3-Clause License"** (verified here) - contradicts the "MIT" note carried in earlier repo work; not re-verified against upstream licence text; numpy not re-verified here | bundles PortAudio and libsndfile respectively. numpy is declared because the `music` module imports it directly - inside the functions that handle samples (`core.py`, `visual.py`, `cli.py`), never at module scope |
 | `[ai]` | `httpx>=0.28,<1` | 0.28.1 | BSD-3-Clause (verified here) | |
 | `[secrets]` | `keyring>=25.7,<26` | 25.7.0 | MIT (verified here) | pulls jaraco.\*, pywin32-ctypes on Windows (transitive) |
 | `[all]` | `levix[ai,monitor,music,secrets,tube]` | - | - | meta-extra only |

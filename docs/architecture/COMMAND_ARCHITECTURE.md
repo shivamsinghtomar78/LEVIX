@@ -181,7 +181,7 @@ Four shapes appear, all of them reading the forwarded `LevixContext`:
 | Shape | Used by | Code |
 |-------|---------|------|
 | `_configured(ctx, dotted, fallback)` | tube, hacker | `tube/cli.py:348`, `hacker/cli.py:283` — read `obj.value(dotted)`, fall back when there is no `obj` at all or when the read raises `ConfigError`/`TypeError`/`ValueError` |
-| `_obj` / `_ctx` / `_context` with a `build_context()` fallback | music, arcade, ai, dashboard, plugins, config | `music/cli.py:80`, `arcade/cli.py:69`, `ai/cli.py:111` |
+| `_obj` / `_ctx` / `_context` with a `build_context()` fallback | music, arcade, ai, dashboard, plugins, config | `music/cli.py:85`, `arcade/cli.py:69`, `ai/cli.py:111` |
 | direct `obj.value(...)` with an `is not None` guard | monitor | `systempulse/cli.py:284,289` — `if obj is not None else 15` / `else 1.0` |
 | `self._value(dotted, fallback)` | dashboard | `dashboard/app.py:243-246` |
 

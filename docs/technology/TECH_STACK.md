@@ -20,9 +20,9 @@ installed in this repository's `.venv`, not guesses.
 | Storage | stdlib `sqlite3` via one shared database (`src/levix/storage.py`) | - (stdlib) | One file (`levix.db`), WAL, 5 s busy timeout, namespaced Python-callable migrations. |
 | Paths | platformdirs | 4.14.3 | Per-OS config/data/cache/state/log locations; overridable with `LEVIX_HOME` and `LEVIX_*_DIR`. |
 | Secrets | keyring (optional, `[secrets]` extra) | 25.7.0 | OS keyring preferred; owner-only plaintext file fallback, honestly reported as DEGRADED by `levix doctor`. |
-| Audio | sounddevice + soundfile | 0.5.6 / 0.14.0 | Bundled PortAudio and libsndfile; decoding and output are in-process, no ffmpeg for `levix music`. |
-| Numerics (audio) | numpy | 2.5.4 | Declared in the `[music]` extra, not relied on transitively from soundfile; `modules/music/core.py` imports it inside the functions that handle samples, never at module scope. |
-| Media | yt-dlp (`[tube]` extra) | 2026.10.26 | Tube is a thin, gated surface over yt-dlp's own policy; `yt_dlp` is imported at exactly one seam (`core._make_ydl`). |
+| Audio | sounddevice + soundfile | 0.5.6 / 0.14.0 | Bundled PortAudio and libsndfile; decoding and output are in-process, so a file on disk needs no ffmpeg. Only `levix music play URL` converts, through yt-dlp's postprocessor. |
+| Numerics (audio) | numpy | 2.5.4 | Declared in the `[music]` extra, not relied on transitively from soundfile; the `music` module imports it inside the functions that handle samples, never at module scope. |
+| Media | yt-dlp (`[tube]` extra) | 2026.10.26 | Tube is a thin, gated surface over yt-dlp's own policy; each module that uses it has exactly one import seam (`tube/core.py::_make_ydl`, `music/core.py::_make_ydl`). |
 | Network (AI) | httpx (`[ai]` extra) | 0.28.1 | One `httpx.Client` built by `ai.core.build_client`, so tests substitute a `MockTransport`. |
 | Network (self-update check) | stdlib `urllib.request` | - | `levix update` queries `https://pypi.org/pypi/levix/json`; the only default network call in core. |
 | Games | stdlib `random` (`random.Random(seed)`, `random.SystemRandom()` for entropy seeds) | - | Determinism for replay, not cryptography; documented at `arcade/scores.py::game_rng`. |
@@ -59,9 +59,11 @@ comments and ordering (`write_user_value`, `remove_user_value`).
 pure data (no Rich, no Typer app, no heavy third-party imports). Heavy imports live
 behind documented seams, each with a test proving help never crosses it:
 
-- `yt_dlp` only inside `tube/core.py::_make_ydl`.
+- `yt_dlp` only inside `tube/core.py::_make_ydl` and `music/core.py::_make_ydl` - one
+  import site per module, and a test counts the one in `music/core.py`.
 - `sounddevice` only inside `music/core.py::play_samples` / `list_devices`;
-  `soundfile`/`numpy` only inside `music/core.py`.
+  `soundfile`/`numpy` only inside the `music` module, and `numpy` never at module scope
+  (`visual.py` and `cli.py` import it inside the functions that need samples).
 - Textual only inside the command bodies of `dashboard_cmd.py`,
   `dashboard/app.py` and `arcade/screens.py`.
 - `psutil` only in the systempulse module and `capabilities.py` probes.

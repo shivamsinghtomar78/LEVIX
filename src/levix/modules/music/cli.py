@@ -5,16 +5,21 @@ Nothing here imports `sounddevice` or `soundfile` - both are reached only throug
 no PortAudio. Windows consoles are cp1252, so bars come from `terminal.bar()` and every
 name passes through `core.safe_text()`; `levix.main` turns a `LevixError` into one clean
 message and the exit code documented in `docs/modules/MUSIC.md`.
+
+Playback has two reporters for the same `on_block` report: `_Progress`, one redrawn line,
+and `_Spectrum`, the band meter. Both are driven by hand off the audio callback - no
+refresh thread - which is the discipline `hacker matrix` already uses.
 """
 
 from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import typer
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
 from rich.markup import escape
 from rich.table import Table
 
@@ -23,7 +28,7 @@ from ...approve import require_approval
 from ...context import LevixContext
 from ...deps import gate
 from ...errors import EXIT_INTERRUPTED, LevixError
-from . import MANIFEST, core
+from . import MANIFEST, core, visual
 
 if TYPE_CHECKING:
     import numpy as np
@@ -95,8 +100,8 @@ def _volume(context: LevixContext, requested: float) -> float:
     return core.validate_volume(requested if requested >= 0 else context.value("music.volume"))
 
 
-def _prepare(file: Path, *, gain: float, rate: int) -> tuple[np.ndarray, int, core.AudioInfo]:
-    frames, samplerate, info = core.load(file, volume=gain)
+def _prepare(path: Path, *, gain: float, rate: int) -> tuple[np.ndarray, int, core.AudioInfo]:
+    frames, samplerate, info = core.load(path, volume=gain)
     if rate:
         target = core.validate_rate(rate)
         frames = core.resample(frames, samplerate, target)
@@ -113,9 +118,10 @@ def _show(value: object) -> str:
     return escape(core.safe_text(value if isinstance(value, str) else str(value)))
 
 
-def _line(info: core.AudioInfo, samplerate: int, gain: float) -> str:
+def _line(info: core.AudioInfo, samplerate: int, gain: float, *, name: str = "") -> str:
+    """One source: what it is, what it holds, and how loud it will come out."""
     return (
-        f"[bold]{_show(info.path.name)}[/bold]  {info.format}/{info.subtype or '-'}  "
+        f"[bold]{_show(name or info.path.name)}[/bold]  {info.format}/{info.subtype or '-'}  "
         f"{samplerate} Hz  {info.channels} ch  {core.format_duration(info.duration)}  "
         f"gain {gain:.2f}"
     )
@@ -156,10 +162,137 @@ class _Progress:
             console.print()
 
 
+class _Reporter(Protocol):
+    """What `core.play_samples` calls back into: take the playhead, then close up."""
+
+    def __call__(self, written: int, total: int) -> None: ...
+
+    def finish(self) -> None: ...
+
+
+class _Spectrum:
+    """The band meter, read from the frames the callback has just handed to the device.
+
+    Nothing new reaches into PortAudio: `on_block(frames_delivered, total)` already said
+    where the playhead is and the samples are in memory, so the window that ends there is
+    the audio being heard now. `visual.frame_due` owns the clock, so the picture costs
+    `visual.FPS` redraws a second however often the callback fires - a 256-frame block on
+    a 44.1 kHz device is about 170 callbacks a second, and drawing every one of them is
+    how a terminal turns to mush.
+    """
+
+    def __init__(self, frames: np.ndarray, samplerate: int) -> None:
+        self._frames = frames
+        self._samplerate = samplerate
+        self._bands = visual.band_count(console.width)
+        self._caps: tuple[float, ...] = (0.0,) * self._bands
+        self._last = 0.0
+        self._live = Live(console=console, auto_refresh=False)
+
+    def start(self) -> None:
+        """Own the region; the first callback is the first frame.
+
+        Drawing here would stamp `_last` with "just drawn" and the gate would then swallow
+        the opening callback - which on a short file, or in a test whose seam calls back
+        once, is the only frame there is.
+        """
+        self._live.start()
+
+    def __call__(self, written: int, total: int) -> None:
+        if visual.frame_due(time.perf_counter(), self._last):
+            self._draw(written, total)
+
+    def _draw(self, written: int, total: int) -> None:
+        self._last = time.perf_counter()
+        start = max(0, written - visual.WINDOW_FRAMES)
+        levels = visual.spectrum(self._frames[start:written], self._samplerate, bands=self._bands)
+        self._caps = visual.apply_caps(levels, self._caps)
+        status = (
+            f"{core.progress_percent(written, total):5.1f}%  "
+            f"{core.format_duration(core.duration_for(written, self._samplerate))} / "
+            f"{core.format_duration(core.duration_for(total, self._samplerate))}"
+        )
+        self._live.update(
+            Group(
+                f"[dim]{status}[/dim]",
+                visual.render(levels, self._caps, glyphs=terminal.active_glyphs()),
+            ),
+            refresh=True,
+        )
+
+    def finish(self) -> None:
+        self._live.stop()
+
+
+def _reporter(mode: str, frames: np.ndarray, samplerate: int) -> _Reporter:
+    """The line or the meter; both take the same `on_block` report."""
+    if mode == "off":
+        return _Progress()
+    meter = _Spectrum(frames, samplerate)
+    meter.start()
+    return meter
+
+
+def _visual_for(context: LevixContext, requested: str) -> str:
+    """Which animation, from the flag, then `music.visual`, then what this stream can show.
+
+    The default quiets down on its own when stdout is redirected - a pipe cannot hold a
+    picture, and the progress line is already the right answer there. A flag the caller
+    typed is never quietly dropped: `--visual bar` on a pipe is refused, exit 2.
+    """
+    wanted = requested.strip().lower()
+    mode = wanted or str(context.value("music.visual") or visual.DEFAULT_MODE)
+    if mode not in visual.MODES:
+        raise core.RequestError(
+            f"--visual must be one of {', '.join(visual.MODES)}, got {mode!r}",
+            hint="or leave it out and let music.visual decide",
+        )
+    if mode != "bar" or console.is_terminal:
+        return mode
+    if wanted:
+        raise core.RequestError(
+            "--visual bar needs a terminal; stdout is redirected, so nothing would be seen",
+            hint="`--visual off` plays with the one-line progress bar",
+        )
+    return "off"
+
+
+def _source(context: LevixContext, source: str) -> core.Source:
+    """Resolve `SOURCE`, saying so first when it means a wait.
+
+    yt-dlp runs with its progress off, so a fetch would otherwise look like a hang. One
+    line before the call is what makes the silence explainable - and only before a call
+    that is really going to run: a cached link, a refused scheme and a plain path all
+    announce nothing.
+    """
+    if core.needs_fetch(source, cache_root=context.paths.cache_dir):
+        console.print(
+            f"[dim]asking yt-dlp for {_clip(source, 68)}; "
+            "this is quiet until the audio has landed[/dim]"
+        )
+    return core.open_source(source, cache_root=context.paths.cache_dir)
+
+
+def _origin(source: core.Source) -> str:
+    """Where the sound came from, in one line - and where the copy lives."""
+    stream = source.stream
+    if stream is None:
+        return ""
+    where = _clip(str(stream.path.parent), 60)
+    if stream.cached:
+        return f"stream replayed from the cache at {where}; the network was not touched"
+    return f"stream fetched to {where}; the same link again needs no download"
+
+
 def _deliver(
-    frames: np.ndarray, *, samplerate: int, device: int, blocksize: int, progress: _Progress
+    frames: np.ndarray, *, samplerate: int, device: int, blocksize: int, progress: _Reporter
 ) -> int:
-    """Hand the frames to the one hardware seam; Ctrl+C becomes a clean exit 130."""
+    """Hand the frames to the one hardware seam; Ctrl+C becomes a clean exit 130.
+
+    `finish()` runs twice on the interrupt path - once so the message prints below a
+    stopped region, once from the `finally`. Rich's `Live.stop` returns early when it is
+    already stopped, and a `LevixError` from the backend must not leave the cursor hidden.
+    """
     try:
         written = core.play_samples(
             frames,
@@ -172,7 +305,8 @@ def _deliver(
         progress.finish()
         console.print("[yellow]interrupted: the stream closed, so the device is free[/yellow]")
         raise typer.Exit(code=EXIT_INTERRUPTED) from None
-    progress.finish()
+    finally:
+        progress.finish()
     return written
 
 
@@ -183,20 +317,31 @@ def _deliver(
 
 def play(
     typer_ctx: typer.Context,
-    file: Path = typer.Argument(..., help="One audio file."),
+    source: str = typer.Argument(..., help="One audio file, or an http(s) link to its audio."),
     device: int = typer.Option(-1, "--device", "-d", help="Output device index, -1 = default."),
     rate: int = typer.Option(0, "--rate", "-r", help="Resample to this Hz, 0 = the file's."),
     volume: float = typer.Option(-1.0, "--volume", "-v", help="0.0-1.0, default music.volume."),
     blocksize: int = typer.Option(0, "--block", help="Frames per callback, 0 = the device's."),
+    visual_mode: str = typer.Option("", "--visual", help="bar or off, default music.visual."),
 ) -> None:
-    """Decode a file with libsndfile and play it on this machine's audio output."""
-    gain = _volume(_ctx(typer_ctx), volume)
-    frames, samplerate, report = _prepare(file, gain=gain, rate=rate)
-    console.print(_line(report, samplerate, gain))
+    """Decode a file - or the audio behind a URL - and play it on this machine's output."""
+    context = _ctx(typer_ctx)
+    gain = _volume(context, volume)
+    mode = _visual_for(context, visual_mode)
+    resolved = _source(context, source)
+    frames, samplerate, report = _prepare(resolved.path, gain=gain, rate=rate)
+    console.print(_line(report, samplerate, gain, name=resolved.label))
     where = "the default output device" if device < 0 else f"device {device}"
     console.print(f"[dim]{report.codec_note}; output: {where}[/dim]")
+    origin = _origin(resolved)
+    if origin:
+        console.print(f"[dim]{origin}[/dim]")
     written = _deliver(
-        frames, samplerate=samplerate, device=device, blocksize=blocksize, progress=_Progress()
+        frames,
+        samplerate=samplerate,
+        device=device,
+        blocksize=blocksize,
+        progress=_reporter(mode, frames, samplerate),
     )
     console.print(
         f"[green]done[/green] {written:,} frames "
@@ -449,10 +594,12 @@ def playlist_play(
     rate: int = typer.Option(0, "--rate", "-r", help="Resample to this Hz, 0 = each file's."),
     volume: float = typer.Option(-1.0, "--volume", "-v", help="0.0-1.0, default music.volume."),
     blocksize: int = typer.Option(0, "--block", help="Frames per callback, 0 = the device's."),
+    visual_mode: str = typer.Option("", "--visual", help="bar or off, default music.visual."),
 ) -> None:
     """Play the queue in order; a file that cannot be decoded is skipped with a warning."""
     context = _ctx(typer_ctx)
     gain = _volume(context, volume)
+    mode = _visual_for(context, visual_mode)
     queue = core.list_playlist(context.database)
     if not queue:
         console.print(
@@ -479,7 +626,7 @@ def playlist_play(
             samplerate=samplerate,
             device=device,
             blocksize=blocksize,
-            progress=_Progress(),
+            progress=_reporter(mode, frames, samplerate),
         )
         played += 1
     console.print(f"[green]done[/green] {played} played, {skipped} skipped of {len(queue)}")

@@ -88,6 +88,35 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `src/levix/py.typed`: `pyproject.toml` has claimed the `Typing :: Typed` classifier since
   0.4.0, but PEP 561 means an editor only gets inline types from `levix.sdk` if the marker
   ships, so plugin authors were being promised typing the distribution did not provide.
+- `levix music play` takes a **link** as well as a file. `play URL` with an `http(s)` scheme
+  asks yt-dlp for the best audio-only stream and converts it with ffmpeg - inside yt-dlp's own
+  `FFmpegExtractAudio` postprocessor, so LEVIX still builds no command line - and hands the
+  result to the same libsndfile decode a file uses. It is a fetch with rules, not an
+  open end: the scheme is judged before either tool is looked for (any other scheme, `file:`
+  included, is exit 2), `noplaylist` is always set, the cache path comes from `sha256(url)`
+  rather than from anything the server said (`<cache_dir>/streams/<16 hex>/audio.mp3`) and a
+  path yt-dlp reports from outside that folder is refused unopened at exit 7, `max_filesize`
+  and a second check on the bytes that landed enforce `STREAM_MAX_BYTES` (134,217,728) at exit
+  7, a cached link replays with no network and no yt-dlp, and a failing fetch is the one
+  message this module prints - yt-dlp's own `logger` gets a silent sink - at exit 8. Missing
+  `yt_dlp` or `ffmpeg` is exit 3 naming where each comes from (`pip install "levix[tube]"`,
+  and this platform's ffmpeg command, a table Music duplicates from Tube and a test keeps
+  them agreeing). `levix music play` on a path performs no fetch and touches neither.
+- `levix music play --visual bar`: Winamp-style spectrum bars while the audio plays. The
+  meter reads the samples at the PortAudio playhead through the `on_block` report the progress
+  line already used, so no second seam into the device appears; the band maths, the peak-hold
+  caps and the redraw gate live as pure functions in `src/levix/modules/music/visual.py`
+  (0 dBFS ceiling at -54 dBFS floor, 40 Hz-15 kHz log-spaced, at most 24 columns, a band
+  sharing its neighbour's bin when it is narrower than one FFT bin), and the drawing is a
+  `Live(auto_refresh=False)` region the module clocks itself. `music.visual` is the new config
+  key (`bar`/`off`, `choices` asserted against the renderer's own modes); the default quiets
+  down to the one-line progress bar when stdout is redirected, and an explicit
+  `--visual bar` on a pipe is refused at exit 2 rather than ignored.
+- One test now writes **every** container the library scan offers - WAV/PCM_16, FLAC,
+  OGG/VORBIS, OGG/OPUS at 48 kHz, MP3/MPEG_LAYER_III, AIFF under both `.aiff` and `.aif`, and
+  AU - and another asserts that table equals `core.SCAN_SUFFIXES`, so adding a suffix to the
+  scan without proving it decodes fails the suite. This is what replaced the old
+  "not covered: `.opus`, `.aiff`, `.aif`, `.au`" line in `docs/modules/MUSIC.md`.
 
 ### Changed
 
@@ -97,6 +126,14 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   metadata.
 - `[music]` now declares `numpy>=2.0,<3`, which `music/core.py` imports directly rather
   than getting by luck from soundfile.
+- The `music` manifest now declares `fs_write` and `network` beside `audio` and `fs_read`, and
+  its summary is "Play, inspect and queue audio natively, from a file or one fetched link."
+  Both new permissions belong to one command - `play URL` - and the disclosure is a disclosure,
+  not a wall; `info`, `devices`, `library` and `playlist` touch neither. The `audio_output`
+  capability detail and the module docstring say the same thing with the exception named ("a
+  file on disk needs no ffmpeg"), and the decoder-refusal hint now reads "a file on this disk
+  is never converted - only a fetched URL goes through ffmpeg" instead of promising that LEVIX
+  never calls ffmpeg, which stopped being true for a link.
 - `levix ai`'s refusal when no key is found puts the sentence in the error and the remedy in
   the hint (`LEVIX_AI_API_KEY`, `levix ai key set`, the keyring service and user name), so
   the two parts stay separately readable instead of one run-on line.
@@ -305,19 +342,20 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 ### Verification
 
 - `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests
-  plugin-examples` exit 0 (84 files already formatted, and the wider `.` scope is clean at 125
-  since the two ADR snippets were re-wrapped); bare `python -m mypy` exits 0 with no
-  issues in 61 source files - `src/levix` plus the example plugin, which is what
+  plugin-examples` exit 0 (85 files already formatted - the 85th is the new
+  `src/levix/modules/music/visual.py` - and the wider `.` scope is clean at 126);
+  bare `python -m mypy` exits 0 with no
+  issues in 62 source files - `src/levix` plus the example plugin, which is what
   `[tool.mypy].files` declares and what CI now runs - and `--platform win32`, `--platform linux`
-  and `--platform darwin` each report the same 61 clean, re-run against this tree because
-  `create_module_cmd._template`, `secrets._write_file`, `module.UiSpec`, `registry` and
-  `dashboard/module_list` are all in it.
+  and `--platform darwin` each report the same 62 clean, re-run against this tree because
+  `create_module_cmd._template`, `secrets._write_file`, `module.UiSpec`, `registry`,
+  `dashboard/module_list` and now `music/core.py` and `music/cli.py` are all in it.
 - The suite, on this machine: `.venv/Scripts/python.exe -m pytest -o addopts="" -q` runs
-  **617 test functions in 21 files, collecting 748 parametrised cases** and reports
-  **740 passed, 8 skipped, 2 warnings in 101.57 s**, exit 0. The same tree without the ten
+  **664 test functions in 21 files, collecting 829 parametrised cases** and reports
+  **821 passed, 8 skipped, 2 warnings in 123.32 s**, exit 0. The same tree without the ten
   `integration` cases - which is what every CI column runs - is
-  **730 passed, 8 skipped, 10 deselected in 95.72 s**, and those ten alone are
-  **10 passed, 738 deselected, 2 warnings in 10.06 s**. Eight skips, and each names its reason:
+  **811 passed, 8 skipped, 10 deselected in 100.90 s**, and those ten alone are
+  **10 passed, 819 deselected, 2 warnings in 10.85 s**. Eight skips, and each names its reason:
   five symlink cases in `tests/modules/test_files.py` (this account cannot create symlinks; three
   more state that POSIX symlinks need no privilege there) and the three POSIX-only permission
   cases in `tests/test_secrets.py`, which CI run #6 executed on the Ubuntu and macOS columns
@@ -344,6 +382,23 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   `docs/roadmap/CURRENT_STATUS.md` is the page that states which of the claims are
   machine-verified and which are not. The tests added since then are named in the pages that
   cite them and were checked against `pytest --collect-only`.
+- The same sweep run again for this tree found that six `test_*` names written into the music
+  pages during the spec phase had never existed as code - they described the cases the task
+  intended, and the shipped cases earned different names. Every one now quotes a function
+  `pytest --collect-only` actually lists, and the pass that fixed them caught one mistyped
+  replacement too (`test_a_file_url_is_refused_before_anything_is_looked_for`, which is not what
+  the file says: the shipped name is
+  `tests/modules/test_music.py::test_a_refused_scheme_is_refused_before_anything_is_looked_for`).
+  Every `file:line` range in the pages this feature touched was re-measured rather than
+  adjusted, because `music/core.py` went from 699 lines to 1094 and every citation below the
+  insertion point had moved.
+- The one network-shaped thing run for real: `levix music play http://127.0.0.1:1/tone` on this
+  machine, with yt-dlp `2026.10.26` importable and ffmpeg on `PATH`. It took about 3.8 seconds,
+  printed exactly one message - `error: yt-dlp could not fetch …` carrying the tool's own
+  `ERROR: [generic] … Unable to download webpage: [WinError 10061]` inside it, not beside it -
+  and exited **8**. That is the loopback interface with nothing listening, so it pins the failure
+  mapping and the one-report rule and says nothing about any site; no third-party download was
+  performed for the record (`docs/modules/MUSIC.md` gap 8).
 - `levix doctor --json` on this machine answers exit 0 with verdict `degraded`:
   `ffmpeg`, `media_player` (`ffplay`), `audio_output`, `psutil`, `battery`, `keyring` and
   `platform` are `ok`, while `temperature` is `degraded` (this `psutil` has no
@@ -374,7 +429,7 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
   exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
   is up to date when it could not ask.
-- **CI ran six times on 2026-11-05**, each time on the commit that changed it. Run #1
+- **CI ran eight times on 2026-11-05**, each time on the commit that changed it. Run #1
   (`fcbcb22`): `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the
   no-extras install, the four exit-3 refusals and the wheel-content assertions are proven on
   a second platform; all four POSIX matrix columns stopped at `Types` on the Windows-only
@@ -426,8 +481,22 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   and none of them failed. This run was read with two calls (the run, then `/jobs`) after the
   `rate_limit` reset, replacing the 20-second poll loop that had spent the whole hour's budget
   without ever seeing the result.
-- What runs #4 through #7 do **not** prove: each column runs `pytest -m "not integration"` - 710
-  of run #6's 720 cases, 733 of run #7's 743 - so the ten device and OS-tool cases still have only ever executed on
+- **Run #8 (`b748591`, run id `42089712550`) is green: all seven jobs `success`.** `Lint`,
+  `Format`, `Types` and `Test suite` report `success` individually on six columns - Windows 3.12
+  and 3.13, Ubuntu 3.12 and 3.13, and macOS 3.12 **and** 3.13, each with a named hosted runner -
+  and the no-extras wheel job's six named steps - `Build the distribution` through
+  `The stdlib-only modules and the platform commands still work` - are all `success`. The column that run #7 lost to
+  runner starvation is the one that came back, so the difference between the two runs is GitHub
+  handing out a macOS machine, not anything in the tree; run #8 took 6 m 12 s from creation to
+  its last job update against run #7's 15 m 3 s. It is the first tree carrying the hidden-module
+  cases and the second carrying `tests/test_secrets.py`, so that file's three POSIX-only cases
+  ran on all four POSIX columns instead of skipping. The per-job `annotations` arrays came back
+  empty, where runs #4 and #5 had carried GitHub's own `actions/checkout` Node.js-20 deprecation
+  warning and some runner notices, and this was again two API calls: the run list, then the job
+  list.
+- What runs #4 through #8 do **not** prove: each column runs `pytest -m "not integration"` - 710
+  of run #6's 720 cases, 733 of run #7's 743, 738 of run #8's 748 - so the ten device and OS-tool
+  cases, and the 81 stream-visualiser cases that landed after `b748591`, have only ever executed on
   Windows 11 here; no command has
   been run by hand on Linux or macOS; and a green column says a branch was reached without
   failing, not that the behaviour was asserted. The per-column pass and skip counts have never

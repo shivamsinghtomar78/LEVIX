@@ -106,6 +106,7 @@ SCHEMA: dict[str, dict[str, Spec]] = {
     "music": {
         "library_dir": Spec("str"),
         "volume": Spec("float", minimum=0.0, maximum=1.0),
+        "visual": Spec("str", choices=("bar", "off")),
     },
     "arcade": {"speed": Spec("float", minimum=0.25, maximum=4.0)},
     "ai": {

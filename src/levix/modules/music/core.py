@@ -1,16 +1,24 @@
-"""Native audio: decode with libsndfile, play through PortAudio, never via ffmpeg.
+"""Native audio: decode with libsndfile, play through PortAudio.
 
 Two rules shape the file. `play_samples` is the only function that opens a stream and
 the only one that imports `sounddevice`, so a test can replace that single name and
 drive every command without touching hardware. Decoding is libsndfile's job: it ships
-inside `soundfile`, and 1.2 reads WAV, FLAC, OGG and MP3 by itself, so nothing here
+inside `soundfile`, and 1.2 reads WAV, FLAC, OGG and MP3 by itself, so a local file never
 shells out to ffmpeg - a codec it does not carry is reported as missing, never faked.
+
+`fetch_audio` is the one exception, and it is narrow: a URL is audio-only extracted and
+converted to MP3 before libsndfile sees it, because the container a stream arrives in is
+one libsndfile refuses. LEVIX still never builds an ffmpeg command line - the conversion
+runs inside yt-dlp's postprocessor - and the file path does not touch this code at all.
 """
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import math
 import os
+import shutil
 import sqlite3
 import sys
 import time
@@ -18,10 +26,19 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from ... import storage as levix_storage
-from ...errors import EXIT_TOOL_FAILED, EXIT_USAGE, ConfigError, LevixError
+from ...errors import (
+    EXIT_TOOL_FAILED,
+    EXIT_USAGE,
+    ConfigError,
+    DependencyError,
+    LevixError,
+    ProviderError,
+)
+from ...paths import resolve_paths
 from ...storage import Database
 
 if TYPE_CHECKING:
@@ -70,6 +87,52 @@ LOSSY_SUBTYPES = frozenset(
     }
 )
 PCM_SUBTYPES = frozenset({"PCM_16", "PCM_24", "PCM_32", "PCM_S8", "PCM_U8", "FLOAT", "DOUBLE"})
+
+# ----------------------------------------------------------------------------------
+# what a URL source is allowed to be
+# ----------------------------------------------------------------------------------
+
+#: The only schemes `play` fetches. Every other one, `file:` included, is refused.
+STREAM_SCHEMES = ("http", "https")
+#: `ba` is the best audio-only stream; `/b` covers a site that serves one file with the
+#: audio already inside it, which the postprocessor then extracts. A merged video+audio
+#: pair is never asked for: it needs ffmpeg just to assemble, and this is an audio job.
+STREAM_FORMAT = "ba/b"
+#: The template the download gets. `audio.` is written here, not taken from the title,
+#: so nothing a remote server chose becomes a name on this disk.
+STREAM_TEMPLATE = "audio.%(ext)s"
+#: What a completed fetch leaves behind: the postprocessor's output name.
+STREAM_FILE = "audio.mp3"
+#: Codec the stream is converted to before libsndfile sees it. Measured with yt-dlp
+#: 2026.10.26 and libsndfile 1.2.2: the audio-only stream lands as `.m4a`, which
+#: `soundfile.info` answers "Format not recognised", and as `.mp3` it reports
+#: `MP3/MPEG_LAYER_III 44100 Hz 2 ch`, which decodes.
+STREAM_CODEC = "mp3"
+#: Bytes a fetch may move. Two halves, both in `fetch_audio`: `max_filesize` makes yt-dlp
+#: abort before transferring when the server declared a length above this, and the file
+#: that actually landed is re-checked, because that pre-flight comparison needs a declared
+#: length and is skipped without one. 128 MiB is 2h20m of 128 kbit/s audio - past any
+#: single track - and that much sound is already about 2.96 GB of stereo float32 once
+#: decoded, so a larger download would be an out-of-memory problem before it was a network
+#: one. The cap bounds the bytes moved; it does not bound the array `load` builds (see
+#: docs/modules/MUSIC.md, gap 10).
+STREAM_MAX_BYTES = 128 * 1024 * 1024
+#: The folder under the cache that holds every stream, one subfolder per URL.
+STREAM_DIR_NAME = "streams"
+#: Hex characters of `sha256(url)` used as that subfolder's name.
+STREAM_ID_LENGTH = 16
+#: The extra that provides `yt_dlp`. Music does not own it, so the message says where it
+#: comes from instead of pretending a `levix[music]` install would have brought it.
+STREAM_PACKAGE_EXTRA = 'pip install "levix[tube]"'
+#: Tube keeps the same table (`modules/tube/core.py`); official modules must not import
+#: each other, so the duplication is deliberate and a test in tests/modules/test_music.py
+#: fails if the two ever disagree.
+FFMPEG_INSTALL_COMMANDS = {
+    "win32": "winget install Gyan.FFmpeg",
+    "darwin": "brew install ffmpeg",
+    "cygwin": "winget install Gyan.FFmpeg",
+}
+FFMPEG_INSTALL_FALLBACK = "sudo apt install ffmpeg"
 
 
 class MusicError(LevixError):
@@ -238,6 +301,38 @@ class AddResult:
     duplicate: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class StreamResult:
+    """One fetched stream: where it landed and whether the network was touched."""
+
+    url: str
+    path: Path
+    cached: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Source:
+    """What `play SOURCE` named, once. `label` is what the source line prints.
+
+    A file prints its own name; a stream prints the URL the person pasted, because
+    `audio.mp3` describes this machine's cache and says nothing about the song.
+    """
+
+    path: Path
+    label: str
+    stream: StreamResult | None = None
+
+    @property
+    def is_stream(self) -> bool:
+        return self.stream is not None
+
+    @property
+    def origin(self) -> str:
+        if self.stream is None:
+            return "file"
+        return "cache" if self.stream.cached else "fetched"
+
+
 # ----------------------------------------------------------------------------------
 # decoding
 # ----------------------------------------------------------------------------------
@@ -289,8 +384,8 @@ def _refused(path: Path, detail: str) -> UnsupportedFormatError:
     )
     return UnsupportedFormatError(
         f"{reason}: {detail}",
-        hint="re-encode to WAV, FLAC, OGG or MP3, which decode in-process; LEVIX never "
-        "calls ffmpeg, so there is no fallback to enable",
+        hint="re-encode to WAV, FLAC, OGG or MP3, which decode in-process; a file on this "
+        "disk is never converted - only a fetched URL goes through ffmpeg",
         detail=detail,
     )
 
@@ -395,6 +490,306 @@ def safe_text(text: str) -> str:
 
 def safe_name(path: Path | str) -> str:
     return safe_text(str(path))
+
+
+# ----------------------------------------------------------------------------------
+# sources: the one argument that may name a stream instead of a file
+# ----------------------------------------------------------------------------------
+
+
+def url_scheme(source: str) -> str:
+    """The scheme of a source string, lower-cased; "" when it carries none.
+
+    `urlsplit` is the parser, and it reads `C:\\music\\tone.wav` as the scheme `c`: a drive
+    letter looks exactly like a scheme to a URL reader. That is why `is_url` asks for two
+    characters before believing it.
+    """
+    try:
+        scheme = urlsplit(source.strip()).scheme
+    except ValueError:
+        # An unterminated IPv6 literal (`http://[::1/x`) raises here rather than parsing
+        # badly, and the answer for this command is "not something I can fetch", not a
+        # traceback.
+        return ""
+    return scheme.lower().strip()
+
+
+def is_url(source: str) -> bool:
+    """True when the source reads as a link, in which case it is never treated as a path.
+
+    A two-character floor is the whole rule: it keeps a Windows drive letter a path and
+    admits every scheme a browser would accept. A POSIX file literally named `mix:1.wav`
+    does trip it, so `./mix:1.wav` is the way to name that file - the same order the
+    leading `./` puts a shell argument in.
+    """
+    return len(url_scheme(source)) >= 2
+
+
+def stream_id(url: str) -> str:
+    """The folder name one URL owns: a digest of the link and nothing else.
+
+    `surrogatepass` because argv on POSIX can carry bytes the locale could not decode, and
+    a lone surrogate would raise inside `encode` - a crash while naming a cache folder.
+    """
+    digest = hashlib.sha256(url.strip().encode("utf-8", "surrogatepass")).hexdigest()
+    return digest[:STREAM_ID_LENGTH]
+
+
+def stream_dir(url: str, *, cache_root: Path | None = None) -> Path:
+    """`<cache>/streams/<sha256(url)[:16]>`, the directory this URL alone writes into.
+
+    Derived from the link, never from the title: a title is arbitrary text from a server,
+    and the day it contains `..`, a separator or a reserved device name, that text would be
+    where this process writes. Two URLs cannot collide here, and the same URL always finds
+    its own earlier copy.
+    """
+    root = Path(cache_root) if cache_root is not None else resolve_paths().cache_dir
+    return root / STREAM_DIR_NAME / stream_id(url)
+
+
+def stream_target(url: str, *, cache_root: Path | None = None) -> Path:
+    """The file a fetch of this URL leaves behind: `<cache>/streams/<id>/audio.mp3`."""
+    root = Path(cache_root) if cache_root is not None else resolve_paths().cache_dir
+    return stream_dir(url, cache_root=root) / STREAM_FILE
+
+
+def needs_fetch(url: str, *, cache_root: Path | None = None) -> bool:
+    """Would this link cost a download right now?
+
+    False for a scheme this command will not fetch and for a link whose audio already
+    landed - both decided without touching yt-dlp. `cli` asks so that the "fetching"
+    notice only appears before a wait that really is about to happen.
+    """
+    if url_scheme(url) not in STREAM_SCHEMES:
+        return False
+    return not stream_target(url, cache_root=cache_root).is_file()
+
+
+def ffmpeg_path() -> str | None:
+    """Where ffmpeg is on PATH, or None. Checked by name, never guessed at a location."""
+    return shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
+
+
+def install_command_for(platform: str | None = None) -> str:
+    return FFMPEG_INSTALL_COMMANDS.get(platform or sys.platform, FFMPEG_INSTALL_FALLBACK)
+
+
+def _package_present(import_name: str) -> bool:
+    """Is the package there, without importing it. `play` must still work as a command.
+
+    A real `yt_dlp` import would cost a second of start-up on every URL and would raise
+    before this module could turn the absence into the documented exit 3.
+    """
+    try:
+        return importlib.util.find_spec(import_name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def require_stream_tools() -> None:
+    """Both halves of the URL path, named as the extra and the tool they really are.
+
+    yt-dlp comes from `levix[tube]`, not `levix[music]`, so the message says where it is
+    from instead of pointing at an install that would not have brought it. ffmpeg is the
+    converter: the stream arrives in a container libsndfile refuses, which is the whole
+    reason this path exists and a local file has no equivalent.
+    """
+    if not _package_present("yt_dlp"):
+        raise DependencyError(
+            "playing a URL needs yt-dlp, which Music does not carry: it comes from the "
+            'tube extra.\n  install it with: pip install "levix[tube]"\n'
+            "  a file on this disk needs neither yt-dlp nor ffmpeg",
+            hint=STREAM_PACKAGE_EXTRA,
+        )
+    if ffmpeg_path() is None:
+        install = install_command_for()
+        raise DependencyError(
+            "playing a URL needs ffmpeg, because the audio-only stream lands in a "
+            f"container libsndfile cannot open.\n  install it with: {install}\n"
+            "  then re-run the same command",
+            hint=install,
+        )
+
+
+class _QuietLogger:
+    """Where yt-dlp's own lines go, so a failure is reported once and in our encoding.
+
+    Setting `logger` is yt-dlp's documented switch for taking its output over: with it
+    present nothing reaches stdout or stderr. That is worth having twice here. The reason a
+    fetch failed already arrives as the exception `fetch_audio` maps, so yt-dlp printing it
+    as well would say the same sentence twice - once in its own format, which goes straight
+    to the stream without `safe_text` and so can raise on a cp1252 console.
+    """
+
+    def debug(self, message: str) -> None:
+        """yt-dlp routes its info lines here too, prefixing only what it calls debug."""
+
+    def warning(self, message: str) -> None:
+        """`no_warnings` is also set; this is the half of the contract that is not a flag."""
+
+    def error(self, message: str) -> None:
+        """Every error yt-dlp reports with `ignoreerrors` False also raises."""
+
+
+_QUIET_LOGGER = _QuietLogger()
+
+
+def _stream_options(directory: Path) -> dict[str, Any]:
+    """Everything this module asks yt-dlp for, in one place a test can read back.
+
+    `enable_file_urls` is deliberately absent: yt-dlp keeps `file:` off by default and
+    nothing here turns it on, which is the same position `tube.core.build_options` takes -
+    a link copied from somewhere else must not get this process to read this disk.
+    `noplaylist` is why one `play` is one item: a playlist is Tube's job. `max_filesize` is
+    the cap described on `STREAM_MAX_BYTES`.
+    """
+    return {
+        "format": STREAM_FORMAT,
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "ignoreerrors": False,
+        "logger": _QUIET_LOGGER,
+        "outtmpl": STREAM_TEMPLATE,
+        "paths": {"home": str(directory)},
+        "max_filesize": STREAM_MAX_BYTES,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": STREAM_CODEC,
+                "preferredquality": "0",
+            }
+        ],
+    }
+
+
+def _make_ydl(options: dict[str, Any]) -> Any:
+    """The only place yt-dlp is imported or instantiated, so a test can stand in for it."""
+    import yt_dlp
+
+    return yt_dlp.YoutubeDL(options)
+
+
+def _run(url: str, options: dict[str, Any], invoke: Callable[[Any], Any]) -> dict[str, Any]:
+    """One yt-dlp call, with its failures made into LEVIX's own.
+
+    `ignoreerrors` is False, so a page that cannot be served reaches the `except` below
+    rather than coming back as an empty result to be played. KeyboardInterrupt and
+    SystemExit are BaseException, so Ctrl+C still leaves `main`'s exit-130 path alone.
+    """
+    ydl = _make_ydl(options)
+    try:
+        result = invoke(ydl)
+    except LevixError:
+        raise
+    except Exception as exc:
+        detail = str(exc).strip() or type(exc).__name__
+        raise ProviderError(
+            f"yt-dlp could not fetch {safe_text(url)}: {detail}",
+            hint="nothing was played. `levix tube info URL` shows what the link offers, "
+            "and `levix music info FILE` decodes a file you point at yourself",
+        ) from exc
+    return dict(result or {})
+
+
+def _reported_path(info: dict[str, Any], *, inside: Path) -> Path:
+    """The file yt-dlp says it produced, after proving it is inside this URL's folder.
+
+    The template fixes the name, but the path comes back from the tool, and a path is the
+    one place a value from outside could choose where this process reads. So it is
+    resolved and bounded before anything opens it.
+    """
+    reported = ""
+    for row in info.get("requested_downloads") or ():
+        if isinstance(row, dict) and (row.get("filepath") or row.get("_filename")):
+            reported = str(row["filepath"] or row["_filename"])
+            break
+    if not reported:
+        raise ProviderError(
+            "the fetch came back with no file path, so there is nothing to play",
+            hint="`levix tube info URL` lists what this link actually offers",
+        )
+    boundary = inside.resolve()
+    try:
+        candidate = Path(reported).resolve()
+    except OSError as exc:
+        raise BackendError(
+            f"the fetched path cannot be checked: {exc}",
+            hint="the partial download is left where it is; nothing was opened",
+        ) from exc
+    if not candidate.is_relative_to(boundary):
+        raise BackendError(
+            f"the fetched file is not inside {safe_name(boundary)}, so it is not opened: "
+            f"yt-dlp reported {safe_name(reported)}",
+            hint="a stream may only be read from the folder its own URL derives; "
+            "`levix music play PATH` is how a file anywhere else is played",
+        )
+    if not candidate.is_file():
+        raise BackendError(
+            f"yt-dlp reported {safe_name(candidate)} and no file is there",
+            hint="the conversion did not finish; re-run the same command",
+        )
+    return candidate
+
+
+def _refuse_oversize(path: Path) -> None:
+    """The cap again, on the bytes that actually arrived.
+
+    yt-dlp's `max_filesize` compares a *declared* length and is skipped when a server
+    answers without one (its HTTP downloader caps `data_len`), so the file on disk is the
+    real check - and it happens before `load`, which is the step that would cost.
+    """
+    size = path.stat().st_size
+    if size > STREAM_MAX_BYTES:
+        raise BackendError(
+            f"{safe_name(path.name)} came down at {size:,} bytes, over the "
+            f"{STREAM_MAX_BYTES:,} byte cap on a fetch",
+            hint="`levix music info PATH` reads the cached file without playing it, and "
+            "deleting that folder is the whole cleanup; long mixes are Tube's job",
+        )
+
+
+def fetch_audio(url: str, *, cache_root: Path | None = None) -> StreamResult:
+    """Fetch the audio behind one link, or hand back what an earlier fetch left.
+
+    The order is the design. The scheme is judged before any tool is looked for, so a
+    `file:` link is a usage error on a machine that has no yt-dlp and never a dependency
+    error blamed on the link. The cache is read before either tool is touched, which is
+    why a link that already landed replays with no network call at all - and `STREAM_MAX_BYTES`
+    is applied to whichever copy is about to be played, cached or new, because what it
+    protects is the decode that follows.
+    """
+    scheme = url_scheme(url)
+    if scheme not in STREAM_SCHEMES:
+        named = f"{scheme}: link" if scheme else "link"
+        raise RequestError(
+            f"cannot fetch the {named} {safe_text(url)}: only "
+            f"{' and '.join(STREAM_SCHEMES)} are played from a URL",
+            hint="pass a path for a file on this disk. `file:` and every other scheme are "
+            "refused, and yt-dlp's own file-URL switch is never enabled",
+        )
+    root = Path(cache_root) if cache_root is not None else resolve_paths().cache_dir
+    directory = stream_dir(url, cache_root=root)
+    target = stream_target(url, cache_root=root)
+    if target.is_file():
+        _refuse_oversize(target)
+        return StreamResult(url, target, cached=True)
+    require_stream_tools()
+    directory.mkdir(parents=True, exist_ok=True)
+    info = _run(url, _stream_options(directory), lambda ydl: ydl.extract_info(url, download=True))
+    path = _reported_path(info, inside=directory)
+    _refuse_oversize(path)
+    return StreamResult(url, path, cached=False)
+
+
+def open_source(source: str, *, cache_root: Path | None = None) -> Source:
+    """Either half of `play SOURCE`: a file on this disk, or the stream a link points at."""
+    if is_url(source):
+        stream = fetch_audio(source, cache_root=cache_root)
+        return Source(stream.path, source.strip(), stream=stream)
+    path = require_file(source)
+    return Source(path, path.name)
 
 
 # ----------------------------------------------------------------------------------

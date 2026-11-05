@@ -30,12 +30,12 @@ the same table and is what `levix doctor --json` can reason over.
 ```
 Exception
 ├── LevixError(message, *, hint=None)          exit 1   base: clean message, no traceback
-│   ├── DependencyError                        exit 3
+│   ├── DependencyError                        exit 3   also raised in modules/music/core.py: a URL without yt-dlp or without ffmpeg
 │   ├── UnknownModuleError                     exit 4   (declared, never raised — see gaps)
 │   ├── ConfigError                            exit 5
 │   ├── UserCancelledError                     exit 6
 │   ├── ExternalToolError                      exit 7
-│   ├── ProviderError                          exit 8
+│   ├── ProviderError                          exit 8   also raised in modules/music/core.py: yt-dlp failed to fetch, or reported no file path
 │   ├── FilesError                             exit 1   modules/files/core.py
 │   ├── UnsafePathError                        exit 2   modules/files/core.py
 │   ├── RequestError                           exit 2   modules/files/core.py and music/core.py
@@ -125,6 +125,10 @@ stdout, so `levix config list ai | grep …` is not polluted by a warning.
 | `levix ai …` with no key | `ProviderError` naming the resolution order | 8 |
 | `levix game scores --clear` | `require_approval(destructive=True, prompt_word="DELETE")` | 6 |
 | `levix music play X` on a dead device | `AudioDeviceError` (via `BackendError`) | 7 |
+| `levix music play URL` with no `yt_dlp`, or no ffmpeg on PATH | `DependencyError` naming `pip install "levix[tube]"` in the first case and this platform's ffmpeg command in the second | 3 |
+| `levix music play ftp://…` or `file:///…` | `RequestError`: the scheme is refused before either tool is looked for, so a link this command will not fetch is never reported as a missing dependency | 2 |
+| `levix music play URL` where yt-dlp raises | `core._run` maps it to `ProviderError`, quoting the tool's own reason inside the one message; yt-dlp's duplicate line is swallowed by the logger it is given | 8 |
+| `levix music play URL` whose reported path is outside the URL's own cache folder, or whose bytes are over `STREAM_MAX_BYTES` | `BackendError` - raised before the file is opened or decoded | 7 |
 | `levix dashboard` with a redirected stdout or stdin | `typer.Exit(code=EXIT_USAGE)` with an explanation | 2 |
 | `levix update` when pypi.org is unreachable | `ProviderError` | 8 |
 | Ctrl+C anywhere | `KeyboardInterrupt` → `\ninterrupted\n` | 130 |

@@ -20,6 +20,7 @@ default_format = "best"
 [music]
 library_dir = ""
 volume = 0.8
+visual = "bar"
 
 [arcade]
 speed = 1.0
