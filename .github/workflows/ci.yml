@@ -21,6 +21,13 @@ jobs:
   suite:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
+    # Without this, `run:` on a Windows runner executes pwsh, not bash. The multi-line
+    # suite step below is bash (`code=$?`, `||`, `while read`), and pwsh failed it for a
+    # reason that had nothing to do with the tests - which is exactly how run #2 lost the
+    # name of the failure it was supposed to report.
+    defaults:
+      run:
+        shell: bash
     strategy:
       # One red platform must not hide the state of the other two.
       fail-fast: false
