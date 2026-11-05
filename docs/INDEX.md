@@ -17,6 +17,12 @@ Two rules govern the whole set, and they are the reason the pages read the way t
   OS-tool cases have never run anywhere but here; no human has run a command on Linux or
   macOS; and the POSIX behaviours listed in `docs/roadmap/CURRENT_STATUS.md` §What is not
   verified have no assertion behind them. Quote those, not the colour of the badge.
+* **A run's conclusion is not the suite's verdict.** Run #7 (`c49d608`) is `failure`, and every
+  job that reached a machine is green: six of seven `success`, while `macos-latest / Python 3.12`
+  was `cancelled` with no runner acquired and no steps run. Reading only the badge would have
+  reported a broken tree; reading the job list reports a GitHub capacity problem. The same run is
+  the first to execute `tests/test_update.py` and `tests/test_create_module.py` off Windows, so it
+  carries real evidence in both directions.
 
 Start with `requirements/PRD.md` for the product, `architecture/SYSTEM_ARCHITECTURE.md`
 for the shape, and `roadmap/CURRENT_STATUS.md` for where the work actually stands.
@@ -105,7 +111,7 @@ into this directory, so `levix plugins info <name>` prints a path that exists.
 | `CHANGELOG.md` | Release history, with an `Unreleased` section that carries the current work. |
 | `SECURITY.md` | Vulnerability reporting. |
 | `LICENSE` | MIT. |
-| `.github/workflows/ci.yml` | The matrix that runs the lint, type and `-m "not integration"` suite on Linux, macOS and Windows, plus a wheel installed with no extras. Added 2026-11-05, run six times: the wheel job has passed on Ubuntu every time, run #3 is the first suite result that can be trusted (red on all six columns, on eight machine-dependent tests, all eight then fixed) and **runs #4 (`5b047ad`), #5 (`75daed2`) and #6 (`3d460df`) are green on all seven jobs**. Run #5 is the one that first executed the file-backed log-redaction case on Linux and macOS; run #6 is the one that first executed the three POSIX file-mode cases in `tests/test_secrets.py`, which skip on Windows, on the Ubuntu and macOS columns - so the `0600` is now a measured POSIX fact rather than an assertion this laptop cannot make. The green covers only the non-`integration` set. |
+| `.github/workflows/ci.yml` | The matrix that runs the lint, type and `-m "not integration"` suite on Linux, macOS and Windows, plus a wheel installed with no extras. Added 2026-11-05, run seven times: the wheel job has passed on Ubuntu every time, run #3 is the first suite result that can be trusted (red on all six columns, on eight machine-dependent tests, all eight then fixed) and **runs #4 (`5b047ad`), #5 (`75daed2`) and #6 (`3d460df`) are green on all seven jobs**. Run #7 (`c49d608`) is `failure` on one job that never got a runner - `macos-latest / Python 3.12`, `cancelled`, no steps - and `success` on the other six, so it is the first run whose `Lint`/`Format`/`Types`/`Test suite` steps passed on macOS 3.13, Ubuntu 3.12/3.13 and Windows 3.12/3.13 with `tests/test_update.py` and `tests/test_create_module.py` in the tree. Run #5 is the one that first executed the file-backed log-redaction case on Linux and macOS; run #6 is the one that first executed the three POSIX file-mode cases in `tests/test_secrets.py`, which skip on Windows, on the Ubuntu and macOS columns - so the `0600` is now a measured POSIX fact rather than an assertion this laptop cannot make. The green covers only the non-`integration` set. |
 | `.github/workflows/release.yml` | Tag-triggered build, GitHub release and PyPI upload through trusted publishing. Has never run, and cannot until the PyPI project exists. |
 | `plugin-examples/hello/` | A real, installable example plugin: its own `pyproject.toml`, one manifest, one command. |
 | `src/levix/` | The code. Docstring comments explain *why*; this directory explains *what*. |

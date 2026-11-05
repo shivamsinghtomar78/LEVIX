@@ -292,7 +292,7 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `levix plugins info` printed `dashboard : not offered` for a manifest that declares no
   `UiSpec` at all - the opposite of what the dashboard does with that manifest, which lists it
   and runs `<name> -h`. The disclosure line now names the effective mode,
-  `suspend (no UiSpec declared)` (`commands/plugins_cmd.py:88-94`), and
+  `suspend (no UiSpec declared)` (`commands/plugins_cmd.py:82-86`), and
   `tests/test_dashboard.py::test_a_manifest_with_no_uispec_is_disclosed_as_offered_by_default`
   pins the new string and the absence of the old one.
 - A module hidden from the dashboard is still a command. The deleted `build_screen` test made
@@ -411,8 +411,23 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   than a claim only this machine could make. Run #6's per-job annotations could not be read: the
   unauthenticated API limit is 60 calls an hour and reading the seven job records spent it, so
   this run is recorded from step conclusions alone.
-- What runs #4, #5 and #6 do **not** prove: each column runs `pytest -m "not integration"` - 710
-  of run #6's 720 cases - so the ten device and OS-tool cases still have only ever executed on
+- **Run #7 (`c49d608`, run id `42083876435`) has conclusion `failure`, and reading it carefully is
+  the point.** Six of its seven jobs are `success`: the no-extras wheel job on Ubuntu, and `Lint`,
+  `Format`, `Types` and `Test suite` individually `success` on Windows 3.12, Windows 3.13, Ubuntu
+  3.12, Ubuntu 3.13 and macOS 3.13. The seventh, `macos-latest / Python 3.12`, is `cancelled` with
+  no runner name and no steps at all, annotated on the run page "The job was not acquired by Runner
+  of type hosted even after multiple attempts" - and the run took 15 m 3 s against the ~6 m of a
+  green one. That is GitHub's macOS capacity, not this tree, and it is written down as a
+  non-green run rather than rounded up, because a badge alone would have said the suite failed.
+  What the five executed columns do prove is new: run #7 is the first tree carrying
+  `tests/test_update.py` and `tests/test_create_module.py`, so those 19 functions and 23 cases ran
+  on Ubuntu and macOS for the first time - including the case that generates a plugin, registers
+  it as a distribution and runs `pytest` **inside the generated project** in a child interpreter -
+  and none of them failed. This run was read with two calls (the run, then `/jobs`) after the
+  `rate_limit` reset, replacing the 20-second poll loop that had spent the whole hour's budget
+  without ever seeing the result.
+- What runs #4 through #7 do **not** prove: each column runs `pytest -m "not integration"` - 710
+  of run #6's 720 cases, 733 of run #7's 743 - so the ten device and OS-tool cases still have only ever executed on
   Windows 11 here; no command has
   been run by hand on Linux or macOS; and a green column says a branch was reached without
   failing, not that the behaviour was asserted. The per-column pass and skip counts have never

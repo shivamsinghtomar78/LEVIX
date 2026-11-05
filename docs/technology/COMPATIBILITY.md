@@ -23,7 +23,10 @@ sixth (`3d460df`) each came back
 **green on all seven jobs**, after the third run - the first one whose suite
 result could be trusted, see the `tee` story in
 `docs/roadmap/CURRENT_STATUS.md` - came back **red on all six columns, on eight
-test functions that depend on the machine**. So this tree's POSIX code paths are
+test functions that depend on the machine**. The seventh (`c49d608`) is `failure` without a
+failing test: six jobs `success`, and `macos-latest / Python 3.12` `cancelled` with no runner
+acquired and no step run, so which columns execute on a given push is not fully in this
+project's hands. So this tree's POSIX code paths are
 *executed* on Linux and macOS and have never failed there. Run #6 is the one that first carried
 `tests/test_secrets.py`, so the three POSIX file-mode cases that skip here ran on Ubuntu and
 macOS instead of skipping - the only POSIX *behaviour* (as opposed to branch) this project has

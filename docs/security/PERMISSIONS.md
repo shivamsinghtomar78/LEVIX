@@ -5,7 +5,7 @@ LEVIX are disclosure, not enforcement.** A module's declaration is printed for a
 read; it never grants, never refuses, and never changes what a module's code can do.
 
 The engine says so itself, in the one place that prints the set for a third-party module
-(`commands/plugins_cmd.py:88-94`):
+(`commands/plugins_cmd.py:88-95`):
 
 > note: declared permissions are a promise by the author, not an enforced limit. Python
 > plugins can do anything LEVIX can.
@@ -43,7 +43,7 @@ The complete list of reads in the engine:
 
 | Site | Behaviour |
 |------|-----------|
-| `commands/plugins_cmd.py:88-94` | `levix plugins info NAME` prints `permissions: <sorted values>` when the set is non-empty, and appends the disclosure warning when `origin is THIRD_PARTY` |
+| `commands/plugins_cmd.py:88-95` | `levix plugins info NAME` prints `permissions: <sorted values>` when the set is non-empty, and appends the disclosure warning when `origin is THIRD_PARTY` |
 | `dashboard/app.py:284-286` | the detail panel appends `permissions <values>` when the set is non-empty |
 | `commands/create_module_cmd.py:119` | the scaffolded manifest declares `{Permission.FS_READ}` |
 | `tests/test_registry.py` | asserts the closed set and the `frozenset` type |
