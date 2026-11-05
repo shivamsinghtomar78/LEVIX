@@ -9,19 +9,24 @@ memory: each claim names the command or test that shows it.
 - Date of the state below: 2026-11-05.
 - Hand-run on **one machine**: Windows 11 build 26200, AMD64, Python 3.12.10 in the
   project-local `.venv`, 8 GB RAM, stdout captured (not a TTY) for every test run.
-- **CI runs #4 (`5b047ad`) and #5 (`75daed2`) are both green**: all six matrix columns - Windows,
-  Ubuntu and macOS at 3.12 and 3.13 - passed `Lint`, `Format`, `Types` and `Test suite`, and
-  the bare-core wheel job passed on Ubuntu. Run #5 is the one that matters more: it is the first
-  to carry `tests/test_logging.py`, so the file-backed redaction case - the only test in the
-  suite that opens a real rotating `levix.log` - has now executed on Linux and macOS and did not
-  fail there. So the suite has executed on three operating systems and four Python versions, on
-  GitHub's runners. It does not make this project "cross-platform verified". Two limits hold.
-  First, those columns run `-m "not integration"`, which on run #5's tree was 701 of its 716
+- **CI runs #4 (`5b047ad`), #5 (`75daed2`) and #6 (`3d460df`) are all green**: all six matrix columns -
+  Windows, Ubuntu and macOS at 3.12 and 3.13 - passed `Lint`, `Format`, `Types` and `Test suite`, and
+  the bare-core wheel job passed on Ubuntu. Run #6 is the one that matters more: it is the first
+  to carry `tests/test_secrets.py`, so its three POSIX-only permission cases - which skip on this
+  laptop because Windows derives `st_mode` from file attributes - executed on Ubuntu 3.12, Ubuntu
+  3.13, macOS 3.12 and macOS 3.13 and reached no failure. That is the first evidence off this
+  machine that a real `secrets.json` written by the real `secrets.set_secret` comes out mode `0600`
+  under a POSIX umask, including when `Path.chmod` is sabotaged. So the suite has executed on three
+  operating systems and four Python versions, on GitHub's runners. It does not make this project
+  "cross-platform verified". Two limits hold.
+  First, those columns run `-m "not integration"`, which on run #6's tree was 710 of its 720
   cases: the ten device/OS-tool cases have only ever run here, and nothing has been hand-run on
   Linux or macOS. Second, the per-column pass and skip counts were never read - GitHub returns
-  403 for a run's log archive to an unauthenticated caller - so what is known about a column is
-  its step conclusions (`Lint`, `Format`, `Types`, `Test suite` all `success`) and its
-  annotations, nothing finer. A green column says the selection reached no failure; it does not
+  403 for a run's log archive to an unauthenticated caller, and the attempt to re-read run #6's
+  per-job annotations exhausted the 60-calls-per-hour unauthenticated limit partway through (five
+  `404`s and one `403`, with `/rate_limit` then reporting `core.remaining = 0`) - so what is known
+  about a column is its step conclusions (`Lint`, `Format`, `Types`, `Test suite` all `success`)
+  and nothing finer. A green column says the selection reached no failure; it does not
   say which cases skipped, and §What is not verified item 1 lists the POSIX behaviours no test
   asserts even when an Ubuntu runner is the one executing them.
   `docs/technology/COMPATIBILITY.md` says what each platform is missing.
@@ -35,16 +40,16 @@ on `importlib.metadata` entry points. The core is six lightweight dependencies
 run time with a message that names the extra. The dashboard is a launcher: it never calls
 module internals, it re-enters `levix <module> …` in a child process with the terminal
 suspended. Commands, modules, errors, exit codes, configuration layering and the
-dependency gate are covered by a 593-function suite that runs without network, without a
+dependency gate are covered by a 612-function suite that runs without network, without a
 real device and without a real terminal.
 
 ## What is built, and how each part is proven
 
 | Part | Exists | Proven by |
 | --- | --- | --- |
-| Core engine (registry, router, config, storage, secrets, deps gate, capabilities, errors, logging, terminal) | 21 top-level modules under `src/levix/` | 12 test files in `tests/` (137 functions, 152 collected cases), `tests/test_logging.py` (6 / 11) and `tests/test_secrets.py` (4 / 4) among them |
+| Core engine (registry, router, config, storage, secrets, deps gate, capabilities, errors, logging, terminal) | 21 top-level modules under `src/levix/` | 14 test files in `tests/` (156 functions, 175 collected cases), `tests/test_logging.py` (6 / 11) and `tests/test_secrets.py` (4 / 4) among them |
 | Textual dashboard (module list, detail panel, history, theme, suspend-and-run launcher) | `src/levix/dashboard/` | `tests/test_dashboard.py` (15) driven headlessly through Textual's Pilot |
-| Platform commands: `doctor`, `config`, `plugins`, `history`, `create-module`, `update`, `secrets` handling | `src/levix/commands/` | `tests/test_doctor.py` (6), `tests/test_config.py` (20), `tests/test_markup_safety.py` (9); `update` and `create-module` have no test |
+| Platform commands: `doctor`, `config`, `plugins`, `history`, `create-module`, `update`, `secrets` handling | `src/levix/commands/` | `tests/test_doctor.py` (6), `tests/test_config.py` (20), `tests/test_markup_safety.py` (9), `tests/test_update.py` (10) against a stubbed `urlopen`, `tests/test_create_module.py` (9 / 13) which generates a project into a temp dir, registers it as a distribution and runs it through the real router |
 | Tube | `src/levix/modules/tube/` | 62 functions / 76 cases against a fake `yt_dlp`, no network |
 | Hacker | `…/hacker/` | 53 / 79, OS reporting driven with captured text |
 | SystemPulse (`monitor`) | `…/systempulse/` | 40 / 46 against a psutil stand-in in `sys.modules`, plus five `run_cli` cases against real psutil |
@@ -58,15 +63,15 @@ real device and without a real terminal.
 
 ```
 .venv/Scripts/python.exe -m pytest -o addopts="" -q
-593 test functions in 19 files, collecting to 720 parametrised cases
-712 passed, 8 skipped, 2 warnings in 96.15 s   (exit 0)
+612 test functions in 21 files, collecting to 743 parametrised cases
+735 passed, 8 skipped, 2 warnings in 115.34 s   (exit 0)
 ```
 
 The same tree, one process at a time, split the way CI splits it:
 
 ```
--m "not integration"   702 passed, 8 skipped, 10 deselected in 88.10 s   (exit 0)
--m integration         10 passed, 710 deselected, 2 warnings in 9.27 s   (exit 0)
+-m "not integration"   725 passed, 8 skipped, 10 deselected in 101.64 s   (exit 0)
+-m integration         10 passed, 733 deselected, 2 warnings in 10.77 s   (exit 0)
 ```
 
 The `-o addopts=""` clears `-q --strict-markers`; it changes nothing about which cases run,
@@ -75,10 +80,11 @@ because `addopts` deselects no marker.
 - The eight skips split by why. Five are symlink cases in `tests/modules/test_files.py`: two
   fail with `WinError 1314` (this account cannot create symlinks) and three state that POSIX
   symlinks need no privilege here. Three are the POSIX-only permission cases in
-  `tests/test_secrets.py`, guarded by `skipif(os.name != "posix")` - they are the ones the next
-  CI run will execute for the first time. Every skip names its reason; none is a silent pass.
+  `tests/test_secrets.py`, guarded by `skipif(os.name != "posix")` - they skipped here and ran on
+  the Ubuntu and macOS columns of CI run #6, which is where that half of the claim now comes from.
+  Every skip names its reason; none is a silent pass.
 - Ten cases carry `@pytest.mark.integration` (`pytest -m integration` collects exactly
-  `10/720 tests, 710 deselected`). The repository's `addopts` is `-q --strict-markers` and
+  `10/743 tests, 733 deselected`). The repository's `addopts` is `-q --strict-markers` and
   deselects nothing, so the default run above already includes them - among them the real
   audio-device playback test, which skips itself when PortAudio reports no output device.
   Three of the ten ask the operating system which sound hardware it has; CI run #3 moved
@@ -155,11 +161,11 @@ work on the screens has to be verified here, because the runners do not look at 
 | Check | Command | Result on this machine |
 | --- | --- | --- |
 | Lint | `.venv/Scripts/python.exe -m ruff check src tests plugin-examples` | exit 0, "All checks passed!" |
-| Format | `.venv/Scripts/python.exe -m ruff format --check src tests plugin-examples` | exit 0, "82 files already formatted". The same check over `.` is also clean (123 files) because ruff 0.17 formats fenced Python inside Markdown, and this commit reformatted the two ADR snippets that said otherwise (`docs/decisions/ADR-0002…`, `ADR-0003…`) - prose untouched, only the code blocks re-wrapped |
+| Format | `.venv/Scripts/python.exe -m ruff format --check src tests plugin-examples` | exit 0, "84 files already formatted". The same check over `.` is also clean (125 files) because ruff 0.17 formats fenced Python inside Markdown, and this commit reformatted the two ADR snippets that said otherwise (`docs/decisions/ADR-0002…`, `ADR-0003…`) - prose untouched, only the code blocks re-wrapped |
 | Types | `.venv/Scripts/python.exe -m mypy` | exit 0, "no issues found in 61 source files" (`[tool.mypy].files` covers `src/levix` **and** `plugin-examples/hello/src`, so the copy-pasteable plugin is checked with the core). Since run #1, `--platform win32`, `--platform linux` and `--platform darwin` are all run here too, because a Linux runner is what found the one Windows-only attribute the tree had |
 | Install | `.venv/Scripts/python.exe -m pip install -e ".[dev,all]"` | the only install proven here |
 | Distribution | `python -m build` then install the wheel into an empty venv | sdist + wheel build (66 wheel entries, `levix/py.typed` present, `levix/data/defaults.toml` exactly once); in the clean venv all seven modules answer `-h` with 0, the four heavy ones refuse with 3 naming the right extra, and no heavy package is imported (`CHANGELOG.md` §Verification) |
-| CI | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | **has run five times.** #1 (`fcbcb22`): the bare-wheel job **passed on Ubuntu** - the first time the extras gate was proven on a platform other than this laptop - and the four POSIX matrix jobs stopped at `Types` on one real cross-platform defect (`st_file_attributes` is Windows-only; `mypy` on a POSIX runner has no stub for it - fixed, and now proven against `--platform win32`, `linux` and `darwin`). #2 (`726909c`) reported "5 successful and 2 failing" and was wrong in both directions: the `Test suite` step piped pytest through `tee` under a shell without `pipefail`, so Linux and macOS went green over a red suite, and both Windows jobs died in pwsh before pytest ran. #3 (`5fdc644`) is the first honest result: **all six columns red, eight test functions between them**, every one of them dependent on the machine it ran on - typer forces a terminal whenever `GITHUB_ACTIONS` is set so the help-page assertions met escape codes, the delete path judged a symlink by its target and refused a safe removal, `os.readlink` returns `\\?\`-prefixed targets on Windows, two tests asked a headless runner about its sound cards, a 68-character macOS runner hostname did not fit the host table's value column, and the AI cap notice wrapped at 80 columns. **#4 (`5b047ad`) is green: run id `42068621524`, all seven jobs `success`, and on each of the six matrix jobs the four steps `Lint`, `Format`, `Types` and `Test suite` individually report `success` - Windows 3.12 and 3.13, Ubuntu 3.12 and 3.13, macOS 3.12 and 3.13 - and the annotation lists hold only GitHub's own `actions/checkout` Node.js-20 deprecation warning plus runner notices, with no `FAILED` line from the suite step. That is the first time this tree has been red-free anywhere other than this laptop, and it confirms all eight fixes on the machines that found them. **#5 (`75daed2`) is green too: run id `42074244730`, all seven jobs `success`, the same four steps individually `success` on all six columns, annotations again only GitHub's Node.js-20 deprecation warning plus the `ubuntu-latest` migration and macOS capacity notices.** Run #5 is the first to carry `tests/test_logging.py`, so `test_a_key_never_reaches_the_log_file` - the only case that opens a real rotating `levix.log` - has now executed on Ubuntu and macOS as well, which is the thing that row was added to find out. What the columns do *not* cover: they run `-m "not integration"`, which on run #5's tree was 701 of its 716 cases - and the per-column pass and skip counts were never read, because GitHub answers an unauthenticated `GET /actions/runs/{id}/logs` with 403, so what is known about a column is its step conclusions and its annotations and nothing finer. Either way the ten device and OS-tool cases have still only ever run on Windows 11 here; and no column asserts anything about the POSIX items in §What is not verified item 1. `release.yml` has **not** run, and it cannot pass until the PyPI project and its trusted publisher exist (`docs/technology/PYTHON_PACKAGING.md` §Publishing) |
+| CI | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | **has run six times.** #1 (`fcbcb22`): the bare-wheel job **passed on Ubuntu** - the first time the extras gate was proven on a platform other than this laptop - and the four POSIX matrix jobs stopped at `Types` on one real cross-platform defect (`st_file_attributes` is Windows-only; `mypy` on a POSIX runner has no stub for it - fixed, and now proven against `--platform win32`, `linux` and `darwin`). #2 (`726909c`) reported "5 successful and 2 failing" and was wrong in both directions: the `Test suite` step piped pytest through `tee` under a shell without `pipefail`, so Linux and macOS went green over a red suite, and both Windows jobs died in pwsh before pytest ran. #3 (`5fdc644`) is the first honest result: **all six columns red, eight test functions between them**, every one of them dependent on the machine it ran on - typer forces a terminal whenever `GITHUB_ACTIONS` is set so the help-page assertions met escape codes, the delete path judged a symlink by its target and refused a safe removal, `os.readlink` returns `\\?\`-prefixed targets on Windows, two tests asked a headless runner about its sound cards, a 68-character macOS runner hostname did not fit the host table's value column, and the AI cap notice wrapped at 80 columns. **#4 (`5b047ad`) is green: run id `42068621524`, all seven jobs `success`, and on each of the six matrix jobs the four steps `Lint`, `Format`, `Types` and `Test suite` individually report `success` - Windows 3.12 and 3.13, Ubuntu 3.12 and 3.13, macOS 3.12 and 3.13 - and the annotation lists hold only GitHub's own `actions/checkout` Node.js-20 deprecation warning plus runner notices, with no `FAILED` line from the suite step. That is the first time this tree has been red-free anywhere other than this laptop, and it confirms all eight fixes on the machines that found them. **#5 (`75daed2`) is green too: run id `42074244730`, all seven jobs `success`, the same four steps individually `success` on all six columns, annotations again only GitHub's Node.js-20 deprecation warning plus the `ubuntu-latest` migration and macOS capacity notices.** Run #5 is the first to carry `tests/test_logging.py`, so `test_a_key_never_reaches_the_log_file` - the only case that opens a real rotating `levix.log` - has now executed on Ubuntu and macOS as well, which is the thing that row was added to find out. **#6 (`3d460df`) is green as well: run id `42078880293`, all seven jobs `success`, and the four steps `Lint`, `Format`, `Types` and `Test suite` individually `success` on every one of the six columns.** Run #6 is the first to carry `tests/test_secrets.py`, whose three POSIX-only cases therefore ran on Ubuntu 3.12, Ubuntu 3.13, macOS 3.12 and macOS 3.13 instead of skipping, and the columns still came back green - the `0600` the `os.open` asks for is now a measured fact about a POSIX filesystem rather than an assertion only this laptop could make. This time the per-job annotations could not be read at all: the attempt ran into the 60-calls-per-hour unauthenticated limit partway through the loop (five `404`s, one `403`, `/rate_limit` then reporting `core.remaining = 0`), so run #6 is recorded from the run conclusion and the step conclusions only. What the columns do *not* cover: they run `-m "not integration"`, which on run #6's tree was 710 of its 720 cases - and the per-column pass and skip counts were never read, because GitHub answers an unauthenticated `GET /actions/runs/{id}/logs` with 403, so what is known about a column is its step conclusions - plus, for runs #4 and #5, its annotations - and nothing finer. Either way the ten device and OS-tool cases have still only ever run on Windows 11 here; and no column asserts anything about the POSIX items still open in §What is not verified item 1. `release.yml` has **not** run, and it cannot pass until the PyPI project and its trusted publisher exist (`docs/technology/PYTHON_PACKAGING.md` §Publishing) |
 | Doctor | `levix doctor --json` | verdict `degraded`, exit 0; capabilities `ffmpeg`, `media_player`, `audio_output`, `psutil`, `battery`, `keyring`, `platform` are `ok`; `temperature` `degraded` (this psutil has no `sensors_temperatures`), `gpu` `unsupported`, `terminal` `degraded` (stdout not a TTY) |
 | Update check | `levix update` | exit 8, `could not check for updates: PyPI returned 404` - the name is unclaimed, and the command refuses to imply "up to date" when it could not ask |
 
@@ -188,6 +194,10 @@ the source. Each row below is a case where the code was wrong, not the doc.
 | Two inert configuration keys (`general.confirm_destructive`, `dashboard.show_system_info`) and one inert flag (`config set --yes`) promised behaviour that did not exist | removed from `SCHEMA`, `defaults.toml` and the CLI rather than wired | `tests/test_config.py::test_no_declared_key_is_secret_shaped`, `test_packaged_defaults_cover_every_schema_key` |
 | `module.LevixModuleProtocol` was public SDK surface implementing nothing, describing a scaffold shape that was not the scaffold | deleted; one contract remains (`MANIFEST` + `cli:build_app`) | `tests/test_plugin_example.py` drives that contract for real |
 | `[set, hidden]` was swallowed by Rich as a style tag, so masked secrets rendered as nothing | `_MASK` is markup-free | `tests/test_markup_safety.py::test_the_config_mask_reaches_the_screen_as_words` |
+| The scaffold's manifest put `Permission.FS_READ` in `permissions` **as a string**, so `levix plugins info <new-module>` died on `p.value` with an `AttributeError` | `frozenset({{Permission.FS_READ}})` in `_template` - the enum member, as `docs/architecture/PLUGIN_ARCHITECTURE.md` already documented | `tests/test_create_module.py::test_the_generated_manifest_loads_through_the_real_registry`, `::test_the_disclosure_report_reads_the_generated_permissions` |
+| The scaffold's own README told the author to run `levix <name> hello`; Typer mounts a one-command app as the command, so click refused the extra argument (exit 2) while `levix <name> -h` still advertised `hello` | the README shows `levix <name>` and `levix <name> you`, and the test asserts the string `hello` is not in it | `tests/test_create_module.py::test_the_scaffold_writes_every_file_the_contract_needs`, `::test_the_generated_command_runs_through_the_real_router` |
+| The scaffold's command body interpolated `{display}`, a variable that exists only in the generator, so the first run of a fresh module raised `NameError: name 'display' is not defined` | prints `MANIFEST.title` with `markup=False`, which also stops a caller-supplied `[/bold]` from being read as a style tag | `tests/test_create_module.py::test_the_generated_command_runs_through_the_real_router` |
+| The scaffold's own `tests/test_manifest.py` asserted `build_app()._name`, an attribute Typer 0.27 does not have, so `pytest` failed inside a brand-new project | asserts `build_app().info.name` | `tests/test_create_module.py::test_the_generated_project_passes_its_own_test_suite`, which runs the generated suite in a child interpreter |
 
 ## Defects found by CI, on platforms this laptop is not
 
@@ -210,13 +220,13 @@ says exactly what closed each row.
 
 ## What is not verified, and should not be claimed
 
-1. **POSIX behaviours no test asserts.** The secrets file is no longer one of them in code:
-   `tests/test_secrets.py` stats `secrets.json` after a real write and asserts mode `0600`, with
-   the `chmod` refused, and with a pre-existing `0644` store overwritten back to `0600` - but
-   those three cases `skip` here (Windows derives `st_mode` from file attributes, not from
-   anything `_harden` does) and no CI run has carried them onto Linux and macOS yet, so the
-   POSIX mode is asserted-in-code and not yet asserted-on-a-POSIX-runner. The Windows half of
-   the same file does run here and reads the real `icacls` output. What is still unread as
+1. **POSIX behaviours no test asserts.** The secrets file is no longer one of them, in either
+   sense: `tests/test_secrets.py` stats `secrets.json` after a real write and asserts mode `0600`,
+   with the `chmod` refused, and with a pre-existing `0644` store overwritten back to `0600`. Those
+   three cases skip on this laptop (Windows derives `st_mode` from file attributes, not from
+   anything `_harden` does) and ran for the first time on a POSIX filesystem in CI run #6, on
+   Ubuntu 3.12/3.13 and macOS 3.12/3.13, where they did not skip and did not fail. The Windows half
+   of the same file reads the real `icacls` output here. What is still unread as
    behaviour: the OS keyring backend, the `ip addr show` / `ifconfig` / `resolv.conf` /
    `nsswitch.conf` / `route -n` parsers - the suite feeds them captured POSIX text and never
    runs the tools - and the platformdirs layout on Linux/macOS. Run #4
@@ -231,8 +241,11 @@ says exactly what closed each row.
    `ffprobe` and `ffplay` are installed on this machine and probe `ok`, but merged-stream
    download and `--convert-to` were never run against a real URL.
 5. **Any network call.** No test reached a site: Tube's `_make_ydl` seam is replaced, AI's
-   transport is stubbed, and `levix update` needs a PyPI entry for a name that is not
-   published. `levix ai` has never spoken to a real model server.
+   transport is stubbed, and `levix update` is now pinned by `tests/test_update.py` against a
+   fake `urllib.request.urlopen` - which proves the parsing, the comparison, the exit codes and
+   the request shape, and proves nothing about what `pypi.org/pypi/levix/json` actually answers.
+   The hand run still says `PyPI returned 404`, because the name is unclaimed.
+   `levix ai` has never spoken to a real model server.
 6. **Redaction outside the four patterns.** `tests/test_logging.py` (6 functions, 11 cases)
    now pins what `RedactFilter` promises - bearer header, `sk-…`, `ghp_`-shaped token,
    `key=value` where the key says `api_key`/`token`/`secret`/`password` - including that a key
@@ -242,19 +255,23 @@ says exactly what closed each row.
    (`docs/security/THREAT_MODEL.md` Known gaps 2). The file-backed case has run on the Linux and
    macOS columns since (`75daed2`, run #5, green on all six), so the rotating-log path is not a
    Windows-only result.
-7. **`levix update` and `levix create-module`.** No tests; the scaffold the generator emits
-   is the shape `tests/test_plugin_example.py` proves by hand, but the generated tree is
-   never executed.
+7. **`levix update` and `levix create-module`.** Both are covered now, and the coverage found four
+   defects in the scaffold - the quoted `Permission`, the `{display}` `NameError`, the README's
+   `levix <name> hello`, and a generated `tests/test_manifest.py` that asserted a private
+   `Typer._name` and failed on the author's first `pytest` (§Defects found by reading the docs
+   against the code). What the tests do not do: no case runs `pip install -e .` on the generated
+   project (the `dist-info` is written by hand, exactly as in `tests/test_plugin_example.py`), and
+   `levix update` has never been pointed at the real PyPI, because there is no `levix` distribution
+   to answer yet.
 8. **Plugin install/publish.** `levix plugins` offers `list` and `info` only; installing a
    plugin means `pip install` in this environment. Deliberate, documented, and still a gap.
 9. **`UiSpec(mode="screen")`.** `registry.build_screen` exists and is tested for its failure
    branch; no manifest in the tree declares a screen, all seven use `suspend`.
-10. **A release, and a green run of the whole suite off this laptop.** Runs #4 and #5 are green
-    on all six columns, so the eight machine-dependent fixes are confirmed and the redaction
-    tests have executed on Linux and macOS; but each column runs
+10. **A release, and a green run of the whole suite off this laptop.** Runs #4, #5 and #6 are green
+    on all six columns, so the eight machine-dependent fixes are confirmed, the redaction tests
+    and the three POSIX permission cases have executed on Linux and macOS; but each column runs
     `-m "not integration"`, so what Linux and macOS have never executed is the ten device and
-    OS-tool cases - the full suite has still never run outside this laptop. The three POSIX
-    permission cases in `tests/test_secrets.py` arrive in the next run, not this one.
+    OS-tool cases - the full suite has still never run outside this laptop.
     `release.yml` has **not**
     run, and it cannot pass until the PyPI project and its trusted publisher exist
     (`docs/technology/PYTHON_PACKAGING.md` §Publishing). The matrix is 3.12 and 3.13 only - no
@@ -275,33 +292,30 @@ says exactly what closed each row.
 
 ## What to do next, in order
 
-1. Read CI run #6 once this tree is pushed. It is the first run that executes
-   `tests/test_secrets.py`, and on Ubuntu and macOS its three POSIX cases will **not** skip: they
-   stat the mode of a real `secrets.json` written by the real `secrets.set_secret`, once normally
-   and once with `Path.chmod` sabotaged. That is the first evidence this laptop cannot produce -
-   the 0600 the `os.open` asks for, seen on a POSIX filesystem under a real umask - so until that
-   run reports, §What is not verified item 1 stays open. If one of them goes red there, read the
-   assertion before touching the test: the likely truths are a runner umask that already strips
-   the group and other bits, or a filesystem that does not store modes at all, and either one is
-   a fact about the platform that the test has to state honestly rather than relax away.
-2. Add tests for `levix update` (against a stubbed PyPI) and `levix create-module` (generate
-   into a temp dir, then import the scaffolded `MANIFEST`).
-3. Decide the fate of `mode="screen"`: either give one module a real embedded screen or drop
+1. Read CI run #7 once this tree is pushed. It is the first run that executes
+   `tests/test_update.py` and `tests/test_create_module.py`, and the second of those is the first
+   case in the suite that starts another interpreter and runs `pytest` inside it. Neither file
+   touches the network or a device, so nothing about them should be machine-dependent - but that
+   is exactly the kind of claim this project has been corrected on twice, so the run is the
+   evidence and not the reasoning. Note that the annotations of a green run may again be
+   un-readable: the unauthenticated API limit is 60 calls an hour and one run's job list plus
+   annotation attempts can spend it.
+2. Decide the fate of `mode="screen"`: either give one module a real embedded screen or drop
    the mode. Documented-but-unused API is a tax on every reader.
-4. Do the one-time PyPI side that a checkout cannot do: the account with 2FA, the project
+3. Do the one-time PyPI side that a checkout cannot do: the account with 2FA, the project
    `levix`, the trusted publisher naming this repo + `release.yml` + the `pypi` environment,
    and that environment in GitHub Settings. Then `git tag v0.4.0 && git push origin v0.4.0`,
    which is the first time README's `pipx install levix` is true and the first time
    `levix update` has a real answer to give.
-5. Only after a release exists: the standalone binaries (starting with the frozen-metadata
+4. Only after a release exists: the standalone binaries (starting with the frozen-metadata
    question in `PYTHON_PACKAGING.md`), a winget manifest, and `levix plugins install` /
    `publish`.
 
 ## How to reproduce the numbers in this page
 
 ```bash
-.venv/Scripts/python.exe -m pytest -o addopts="" -q              # the suite, all 720 cases
-.venv/Scripts/python.exe -m pytest -o addopts="" -q -m "not integration"   # the 710 CI runs
+.venv/Scripts/python.exe -m pytest -o addopts="" -q              # the suite, all 743 cases
+.venv/Scripts/python.exe -m pytest -o addopts="" -q -m "not integration"   # the 733 CI runs
 .venv/Scripts/python.exe -m pytest -o addopts="" -q -m integration         # just the 10 device/OS cases
 .venv/Scripts/python.exe -m ruff check src tests plugin-examples        # lint
 .venv/Scripts/python.exe -m ruff format --check src tests plugin-examples  # format
@@ -313,7 +327,7 @@ Four of those lines are `.github/workflows/ci.yml`'s `suite` job - `Lint`, `Form
 `Test suite` - and the `Test suite` step is the `-m "not integration"` line; the bare run and the
 `-m integration` line are how this machine covers the ten cases the matrix deselects.
 The repository's `addopts = "-q --strict-markers"` deselects no marker, so an unmodified
-`pytest` is the full 720 cases here; a job that must not touch a device or an OS tool has to
+`pytest` is the full 743 cases here; a job that must not touch a device or an OS tool has to
 say `-m "not integration"` explicitly rather than assume the config does it. `-o addopts=""`
 is in the lines above because adding `-q` to the config's own `-q` gives `-qq`, which prints
 progress but no summary line - the numbers in this page would otherwise be unrepeatable.

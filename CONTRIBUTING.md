@@ -43,9 +43,9 @@ pre-commit install
 ruff check src tests plugin-examples
 ruff format src tests plugin-examples
 mypy                                # [tool.mypy].files already includes plugin-examples
-pytest                          # all 720 cases; no network, no real TTY
+pytest                          # all 743 cases; no network, no real TTY
 pytest -m integration           # only the 10 that touch a device or a real OS tool
-pytest -m "not integration"     # the CI-safe subset (710 cases)
+pytest -m "not integration"     # the CI-safe subset (733 cases)
 levix doctor
 ```
 
@@ -57,7 +57,7 @@ runner may not be allowed to create, or a terminal width is an `integration` cas
 given its width explicitly, because a runner that disagrees with your laptop is the only
 way this project finds out. The hooks in `.pre-commit-config.yaml` mirror the lint, format
 and type steps so CI is not a surprise; the suite is not in a hook because a full uncontended
-run takes ~1.6 minutes here (`docs/roadmap/CURRENT_STATUS.md` §Test suite as last run).
+run takes ~1.9 minutes here (`docs/roadmap/CURRENT_STATUS.md` §Test suite as last run).
 
 Run one pytest process at a time on a small machine, and never pipe the suite through `tail` -
 it discards the traceback of the one failure you will want to read. `pytest-xdist` is not a
@@ -96,7 +96,12 @@ config loader raises if the two disagree, on purpose.
 
 ## Adding a module (or a plugin)
 
-`levix create-module yourname` scaffolds a correct, installable package. Then:
+`levix create-module yourname` scaffolds a correct, installable package, and
+`tests/test_create_module.py` says so: it runs the generator into a temporary directory,
+registers what appeared the way `pip install -e .` would, and drives the result through the
+real router - so a scaffold that only looks like the contract fails here instead of on your
+machine. Note that a one-command module is mounted as the command itself: the usage is
+`levix yourname someargument`, not `levix yourname hello someargument`. Then:
 
 - Declare `requirements` and `extras` truthfully; `levix doctor` and
   `levix plugins list` render exactly what you declare.

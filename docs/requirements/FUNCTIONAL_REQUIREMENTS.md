@@ -90,7 +90,7 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 | FR-51 | Secret lookup order is `LEVIX_<NAME>` → OS keyring (service `levix`) → owner-only file `secrets.json`; the source is returned with the value. | `src/levix/secrets.py` (`get_secret`) | `tests/modules/test_ai.py::test_key_from_the_environment_wins`, `::test_key_from_the_keyring_when_env_is_silent`, `::test_key_from_the_owner_only_file_when_no_keyring`; the file's own permissions are `tests/test_secrets.py` (the Windows ACL case runs here, the three POSIX mode cases skip here) |
 | FR-52 | Config files are never consulted for secrets, and the AI module prints only the key's source. | `config.is_secret_key`, `secrets.py` docstring, `modules/ai/cli.py::check` | `tests/modules/test_ai.py::test_no_key_anywhere_reports_none` |
 | FR-53 | Writing a secret prefers the keyring and removes any stale file copy. | `secrets.set_secret` | `tests/modules/test_ai.py` (keyring-path tests) |
-| FR-54 | The fallback file is hardened on every write: `chmod 0600` plus, on Windows, `icacls /inheritance:r /grant:r <user>:F`. | `secrets._harden` | `tests/modules/test_ai.py::test_key_set_falls_back_to_the_owner_only_file` (the Windows `icacls` argument list runs); the POSIX `chmod 0600` branch is unverified here — see Known gaps |
+| FR-54 | The fallback file is hardened on every write: `chmod 0600` plus, on Windows, `icacls /inheritance:r /grant:r <user>:F`. | `secrets._harden` | `tests/modules/test_ai.py::test_key_set_falls_back_to_the_owner_only_file` (the Windows `icacls` argument list runs), `tests/test_secrets.py` (the real `icacls` output here, and the three `st_mode == 0o600` cases that ran on Ubuntu and macOS in CI run #6 after skipping on Windows) |
 | FR-55 | `LEVIX_DISABLE_FILE_SECRETS=1` refuses the plaintext store outright and says to use the environment variable instead. | `secrets.backend`, `secrets.set_secret` | `tests/modules/test_ai.py::test_key_set_with_the_file_store_disabled_is_a_dependency_error` (with no keyring, the refusal exits 3, names `levix[secrets]` and does not echo the value) |
 | FR-56 | `doctor` reports the plaintext-file fallback as `degraded`, never as success, with `pip install "levix[secrets]"` as the remedy. | `doctor.environment` | `tests/test_doctor.py::test_the_full_report_carries_all_three_areas` pins the report's areas, not this branch; on this machine the keyring answers, so `secrets` reads `ok | OS keyring (backend probe failed; falls back per call)` in `levix doctor --json` |
 
@@ -128,7 +128,7 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 | FR-74 | `--yes` never authorises a destructive action; it prints why and prompts anyway. | `approve.require_approval` (`destructive and assume_yes`) | `tests/modules/test_ai.py::test_command_yes_cannot_authorize_a_run`, `tests/modules/test_files.py::test_copy_with_force_still_needs_a_terminal` |
 | FR-75 | A stdin that is not a terminal is a refusal (exit 6), not consent. | `approve.require_approval` | `tests/modules/test_files.py::test_delete_refuses_without_a_terminal_and_removes_nothing`, `tests/modules/test_ai.py::test_command_with_run_refuses_without_a_terminal` |
 | FR-76 | `files delete` prints the plan (what and how much) before asking, and `--force` on copy/move/rename only permits a collision, never a silent replacement. | `modules/files/cli.py::delete`, `_confirm_overwrite` | `tests/modules/test_files.py` |
-| FR-77 | `create-module --force` requires the typed confirmation before `shutil.rmtree` on an existing non-empty scaffold. | `commands/create_module_cmd.py` | unverified as a named test |
+| FR-77 | `create-module --force` requires the typed confirmation before `shutil.rmtree` on an existing non-empty scaffold. | `commands/create_module_cmd.py` | `tests/test_create_module.py::test_force_without_a_terminal_refuses_and_deletes_nothing` (exit 6, the marker file and the `pyproject.toml` both still there) and `::test_an_existing_project_is_never_overwritten_unasked` (exit 5 without `--force`) |
 
 ## J. Dashboard
 
@@ -155,10 +155,10 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 | FR-91 | `doctor` reports areas `paths`, `config`, `storage`, `secrets`, `module:<name>` and `capability:<name>`, each with a status word and a remedy. | `src/levix/doctor.py`, `commands/doctor_cmd.py` | `tests/test_doctor.py::test_the_full_report_carries_all_three_areas`, `tests/test_deps.py`, `tests/test_storage.py` cover the underlying data |
 | FR-92 | `doctor` exits 3 only when a module reports `missing`; degraded and unsupported findings, including missing capabilities, exit 0. | `doctor.exit_code_for`, `Finding.worst` | observed on this machine: verdict `degraded` (temperature probe fails, GPU `unsupported`, stdout not a TTY) with exit 0; every module and the ffmpeg/media_player/audio_output/psutil/keyring capabilities report `ok` |
 | FR-93 | `doctor --json` emits `{verdict, findings[]}` (each finding is `area`, `status`, `detail`, `hint`) and raises the same exit code; `--only` restricts the report to `env`, `modules` or `capabilities` and the verdict is computed from the rows actually shown. | `commands/doctor_cmd.py` (filter at 43-54) | `tests/test_doctor.py` (6 functions: the full three-area report, each `--only` slice, an unknown area is a config error, a filtered report states its own verdict) |
-| FR-94 | `levix update` reads `https://pypi.org/pypi/levix/json`, states whether the installed version is current, and prints `pip install --upgrade levix`, `pipx upgrade levix` and the standalone instruction. It never modifies the installation. | `commands/update_cmd.py` | unverified as a named test (needs network) |
-| FR-95 | An unreachable or malformed PyPI response exits 8 and says the failure is a network limitation, not evidence of being up to date. `--timeout` is accepted in 1-60 seconds (default 6.0). | `commands/update_cmd.py` | unverified as a named test |
-| FR-96 | `levix create-module NAME` requires 2-30 characters of `[a-z0-9_-]` starting with a letter, and exits 5 otherwise. | `commands/create_module_cmd.py` (`_NAME_RE`) | unverified as a named test |
-| FR-97 | The scaffold is the same shape the official modules use: `levix-<name>` distribution, `levix_<name>` package, `levix.plugins` entry point to `MANIFEST`, `cli.py:build_app` deferred, `dependencies = ["levix>=0.4"]`, README and a manifest test. | `create_module_cmd._template` | unverified end-to-end (no install of the generated package in this suite) |
+| FR-94 | `levix update` reads `https://pypi.org/pypi/levix/json`, states whether the installed version is current, and prints `pip install --upgrade levix`, `pipx upgrade levix` and the standalone instruction. It never modifies the installation. | `commands/update_cmd.py` | `tests/test_update.py` (10 functions against a replaced `urlopen`, no socket opened): the newer release is named, an equal version counts as current, `--json` carries both versions, and the request's URL, user agent, `Accept` and timeout are asserted |
+| FR-95 | An unreachable or malformed PyPI response exits 8 and says the failure is a network limitation, not evidence of being up to date. `--timeout` is accepted in 1-60 seconds (default 6.0). | `commands/update_cmd.py` | `tests/test_update.py::test_a_pypi_http_status_is_a_provider_failure_not_a_quiet_zero` (503 → exit 8, the status on the screen, and no "latest release" wording), `::test_no_response_is_reported_as_a_limitation_and_not_as_being_up_to_date`, `::test_the_json_answer_still_reports_the_failure`, `::test_a_response_without_a_version_is_an_error_rather_than_a_guess`, `::test_an_absurd_timeout_is_refused_before_any_request` (0.5 and 600 → exit 2, and the fake transport records that no request was made) |
+| FR-96 | `levix create-module NAME` requires 2-30 characters of `[a-z0-9_-]` starting with a letter, and exits 5 otherwise. | `commands/create_module_cmd.py` (`_NAME_RE`) | `tests/test_create_module.py::test_a_name_that_is_not_a_module_id_is_refused_and_creates_nothing` (5 parametrised names: `Weather`, `w`, `has space`, `9lives`, 31 characters - exit 5 and no directory created) |
+| FR-97 | The scaffold is the same shape the official modules use: `levix-<name>` distribution, `levix_<name>` package, `levix.plugins` entry point to `MANIFEST`, `cli.py:build_app` deferred, `dependencies = ["levix>=0.4"]`, README and a manifest test. | `create_module_cmd._template` | `tests/test_create_module.py` - the generator runs into a temp dir, the result is registered through a hand-built `dist-info` and loaded by the real `ModuleRegistry` (`Origin.THIRD_PARTY`, `provider == "levix-weather"`, `permissions` holding real `Permission` members), driven through the real router, read by `levix plugins info`, proven not to import `cli` at manifest time, and its own generated `pytest` suite is executed in a child interpreter |
 
 ## L. Module behaviour
 
@@ -243,19 +243,26 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 
 Requirements the code does not meet as written, or that no test holds:
 
-- FR-94/FR-95: `levix update` has no test at all, and a real one needs
-  `https://pypi.org/pypi/levix/json` to resolve for a distribution name that is not published.
-- FR-96/FR-97: `levix create-module` has no test. The scaffold it emits — `__all__ = ["MANIFEST", "build_app"]`
-  (`commands/create_module_cmd.py:109`), `MANIFEST` with `cli_path="{package}.cli:build_app"`
-  (`:111`, `:115`), `build_app()` (`:124`) and even a `tests/test_manifest.py` (`:174`) — is the
-  same shape the example plugin ships and `tests/test_plugin_example.py` drives end to end, but
-  the generated tree itself is never run and the name-validation exit 5 is asserted by no test.
-- The POSIX half of several requirements is still unasserted even though CI run #4 (`5b047ad`)
-  is green on Ubuntu and macOS: FR-54 (`secrets._harden`'s `chmod` runs there, nothing stats
-  the mode), FR-103 (the `ip addr show`, `ifconfig`, `resolv.conf` and `route -n` parsers are
+- FR-94/FR-95: tested now, against a `urlopen` the case replaces. What no test can say is what
+  `https://pypi.org/pypi/levix/json` actually answers, because that distribution does not exist
+  yet; the hand run reports `PyPI returned 404` and exits 8.
+- FR-96/FR-97: closed by `tests/test_create_module.py`, which runs the generator, registers its
+  output the way an editable install would and executes it - and found four defects in the
+  scaffold on the way (a `permissions` entry that was the *string* `"Permission.FS_READ"` and so
+  broke `levix plugins info`, a command body that interpolated the generator-only `{display}` and
+  raised `NameError`, a README that told the author to type a `hello` subcommand that Typer does
+  not mount, and a generated `tests/test_manifest.py` asserting a private `Typer._name`). What
+  remains unproven: no case runs `pip install -e .` on the generated project, and the scaffold's
+  `dependencies = ["levix>=0.4"]` is never resolved against a real index.
+- The POSIX half of several requirements is still unasserted even though CI runs #4 (`5b047ad`),
+  #5 (`75daed2`) and #6 (`3d460df`) are green on Ubuntu and macOS: FR-103 (the `ip addr show`,
+  `ifconfig`, `resolv.conf` and `route -n` parsers are
   fed captured POSIX text; the tools themselves are never run), and the keyring backend
   selection under FR-51/FR-53/FR-55. A green column means the POSIX *branches* the tests reach
-  do not crash; it does not mean any of the four behaviours above was observed.
+  do not crash; it does not mean any of the behaviours above was observed.
+  FR-54 is no longer in that list: `tests/test_secrets.py` stats the mode of a real
+  `secrets.json`, and run #6 executed those three cases on Ubuntu 3.12/3.13 and macOS
+  3.12/3.13 - the first POSIX evidence, rather than a Windows skip of a POSIX assertion.
 - FR-70/FR-71 bound or refuse when stdout is a pipe, which is how every interactive surface is
   tested here. Real TTY behaviour — the dashboard on a screen, `files browse`, `monitor live`,
   `hacker matrix` animating, playing Snake by key — is exercised only through Textual's Pilot.

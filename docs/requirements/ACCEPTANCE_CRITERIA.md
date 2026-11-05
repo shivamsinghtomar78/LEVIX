@@ -1,25 +1,26 @@
 # LEVIX Acceptance Criteria
 
 Each criterion states behaviour asserted by a named test in `tests/` or observable from a documented command. Exit codes are the table in
-`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 593 test functions in 19 files (12 in `tests/`, 7 in `tests/modules/`)
-collecting to 720 parametrised cases, 10 marked `integration`; the hand run behind every line below is `712 passed, 8 skipped`. Eight skips,
+`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 612 test functions in 21 files (14 in `tests/`, 7 in `tests/modules/`)
+collecting to 743 parametrised cases, 10 marked `integration`; the hand run behind every line below is `735 passed, 8 skipped`. Eight skips,
 each naming its reason: five symlink cases - this Windows account cannot `os.symlink`, and three of them are POSIX-only by design - and the
-three POSIX-only file-mode cases of `tests/test_secrets.py`, which is the one part of this page whose evidence a CI run has not produced yet.
+three POSIX-only file-mode cases of `tests/test_secrets.py`, which CI run #6 (`3d460df`) executed on the Ubuntu and macOS columns instead of
+skipping them.
 All of it was measured
 on Windows 11 with Python 3.12.10 in an editable `.venv` install. GitHub Actions runs
 the same tree minus the 10 `integration` cases on Ubuntu, macOS and Windows; its third run
 was **red on all six columns, on eight test functions that depend on the machine**, all eight
-were fixed, and its fourth (`5b047ad`) and fifth (`75daed2`) runs are **green on all seven
+were fixed, and its fourth (`5b047ad`), fifth (`75daed2`) and sixth (`3d460df`) runs are **green on all seven
 jobs**. So the lines below
-are now cross-platform results for the 710 non-`integration` cases and Windows-only results
+are now cross-platform results for the 733 non-`integration` cases and Windows-only results
 for the other ten - and for anything a runner never asserts, which §What is not verified lists.
 `tests/conftest.py` keeps runs
 off a real profile (`LEVIX_*` cleared, `LEVIX_HOME` in a temp directory, `NO_COLOR=1`, file logging disabled at `conftest.py:38`, registry
 reset per test) and `run_cli` calls the real entry point `levix.main.main(list(argv))`, so exit codes and history rows are part of what is
-asserted. Checks: `python -m pytest -o addopts="" -q` (720 collected, `712 passed, 8 skipped, 2 warnings in 96.15 s`, no network, no real TTY - and yes, that includes the 10
-`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `702 passed, 8 skipped, 10 deselected`), `python -m pytest -m integration` (those 10 alone: `10 passed, 710
-deselected`), `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests plugin-examples` (both exit 0,
-82 files already formatted), `python -m mypy` (61 files - `[tool.mypy].files` also covers the example plugin - no issues) and the same with
+asserted. Checks: `python -m pytest -o addopts="" -q` (743 collected, `735 passed, 8 skipped, 2 warnings in 115.34 s`, no network, no real TTY - and yes, that includes the 10
+`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `725 passed, 8 skipped, 10 deselected in 101.64 s`), `python -m pytest -m integration` (those 10 alone: `10 passed, 733
+deselected, 2 warnings in 10.77 s`), `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests plugin-examples` (both exit 0,
+84 files already formatted), `python -m mypy` (61 files - `[tool.mypy].files` also covers the example plugin - no issues) and the same with
 `--platform win32`, `--platform linux` and `--platform darwin`, `levix doctor`. Citations: a bare `file.py:line` is under `src/levix/`; `tests/FILE.py` names a test file (module tests are
 `tests/modules/FILE.py`) and each identifier after it is one of its test functions.
 
@@ -177,7 +178,10 @@ alias, which is the `greet` command itself), the same command runs three times; 
 **AC-22 — installing a plugin is pip, and nothing else.** Given a new plugin, when its author runs `pip install -e .`, then
 `levix plugins list` shows it and `levix <name>` works; there is no `plugins install`, `uninstall` or `publish`, and `plugins info` on an
 unknown name exits 4. Check: `commands/plugins_cmd.py:1-8` (the deliberate omission), `plugin-examples/hello/README.md:10-21`.
-`levix create-module` scaffolds the project (`create_module_cmd.py:78-186`); no test installs the generated package end-to-end.
+`levix create-module` scaffolds the project (`create_module_cmd.py:79-191`), and
+`tests/test_create_module.py` generates it into a temp dir, registers it the way `pip install -e .`
+would and runs it through the real router - but no case invokes pip, so the resolution of
+`dependencies = ["levix>=0.4"]` against an index is not what is proven here.
 
 ## I. Security invariants
 
@@ -250,6 +254,6 @@ filter is applied at `commands/doctor_cmd.py:43-54`.
 | Real TTY behaviour | playing Snake or Tetris by key, `files browse`, `monitor live`, animated `hacker matrix`, the dashboard on a screen | AC-15 forces refusal or bounding when stdout is a pipe; screens are driven headlessly by Textual's Pilot (`tests/test_dashboard.py`, `tests/modules/test_files.py::test_browse_screen_copies_previews_and_deletes`, `tests/modules/test_arcade.py::test_the_snake_screen_steers_on_a_key_redraws_and_settles`, the last two `integration`) |
 | Typed destructive words | a human typing `DELETE`, `OVERWRITE` or `RUN` at a real prompt | AC-25/AC-26 are asserted only through the non-TTY refusal; `approve.py:51-59` has no interactive test |
 | Audible playback and a real download | sound actually reaching a device; a merged-stream download and a `--convert-to` that really ran | `tests/modules/test_music.py::test_zero_five_seconds_of_a_real_tone_reaches_a_real_output_device` is `integration` and device-dependent; the tube tests drive the ffmpeg verdict through `core.ffmpeg_path()` patched in a test (`tests/modules/test_tube.py::test_a_conversion_works_when_ffmpeg_is_present`), and no download was ever performed for real because the build made no network requests. Note the machine state: `ffmpeg`, `ffprobe` and `ffplay` ARE on PATH here (a winget `yt-dlp.FFmpeg` build), so `capabilities.probe("ffmpeg")` and `probe("media_player")` both report `ok` and the exit-7 refusal is not reachable on this host without patching |
-| Network providers | live Tube downloads, `levix ai` against a real server, `levix update` against PyPI | the suite substitutes Tube's `_make_ydl` seam and the AI transport; `levix update` and `update --json` have no test (`PRD.md` FR-94, FR-95) and need a reachable `https://pypi.org/pypi/levix/json` for a name that is not published |
+| Network providers | live Tube downloads, `levix ai` against a real server, `levix update` against PyPI | the suite substitutes Tube's `_make_ydl` seam and the AI transport, and `tests/test_update.py` now drives `levix update` and `update --json` against a replaced `urlopen` - which pins the parsing, the comparison, the exit codes and the request shape without opening a socket. What no test answers is what `https://pypi.org/pypi/levix/json` really returns for a name that is not published |
 | Distribution | `pipx install levix`, wheels, standalone binaries | `README.md:13-23` advertises them and nothing is published: `https://pypi.org/pypi/levix/json` answers 404 and `levix update` exits 8 naming it. The wheels build (`python -m build`, 66 entries, `levix/py.typed` in) and `.github/workflows/release.yml` would publish them, but the PyPI project and its trusted publisher do not exist yet. The only accepted install remains `pip install -e ".[dev,all]"` from this tree |
-| CI evidence | "the suite is green on every push" **is now accepted for the non-`integration` set**; what is not accepted is anything the columns never run | `.github/workflows/ci.yml` (3 OSes x Python 3.12/3.13, plus a no-extras wheel job) has run four times on 2026-11-05. Run #4 (`5b047ad`) is **green on all seven jobs** - `Lint`, `Format`, `Types` and `Test suite` each report success on Windows, Ubuntu and macOS at both versions, and the wheel job's five assertions pass on Ubuntu. The columns run `-m "not integration"`, so the ten device and OS-tool cases and the file-backed redaction case have only ever run on Windows 11 here, and `release.yml` has never run at all |
+| CI evidence | "the suite is green on every push" **is now accepted for the non-`integration` set**; what is not accepted is anything the columns never run | `.github/workflows/ci.yml` (3 OSes x Python 3.12/3.13, plus a no-extras wheel job) has run six times on 2026-11-05. Runs #4 (`5b047ad`), #5 (`75daed2`) and #6 (`3d460df`) are each **green on all seven jobs** - `Lint`, `Format`, `Types` and `Test suite` report success on Windows, Ubuntu and macOS at both versions, and the wheel job's five assertions pass on Ubuntu. Run #5 first executed the file-backed redaction case on Linux and macOS; run #6 first executed the three POSIX file-mode cases of `tests/test_secrets.py` there. The columns run `-m "not integration"` - 733 of this tree's 743 cases - so the ten device and OS-tool cases have only ever run on Windows 11 here, and `release.yml` has never run at all |

@@ -42,7 +42,26 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   come back to `0600` when an existing `0644` store is overwritten. On Windows it runs the real
   `icacls` and requires one explicit grant, to this user, with nothing inherited - because
   `st_mode` there reports `0o666` for every ordinary file and proves nothing. The three POSIX
-  cases `skip` on Windows, so they are the first thing the next CI run has to answer.
+  cases `skip` on Windows; CI run #6 (`3d460df`) carried them onto Ubuntu 3.12/3.13 and macOS
+  3.12/3.13, where they ran and the columns stayed green.
+- `tests/test_update.py`: 10 test functions for `levix update`, against a `urllib.request.urlopen`
+  the case replaces - no socket is opened. It pins that a newer release is named and the upgrade
+  is left to the user, that the comparison is `>=` rather than `>` (so an equal version is
+  "up to date"), what `--json` carries, that an HTTP 503 and a `URLError` are both reported as
+  failures with `EXIT_PROVIDER` instead of being dressed up as "up to date", that a payload with
+  no version is a provider failure rather than a crash, what the request itself looks like
+  (`https://pypi.org/pypi/levix/json`, a `levix/<version>` user agent, `Accept: application/json`,
+  the timeout the option was given), and that an absurd `--timeout` is refused before any request
+  is made.
+- `tests/test_create_module.py`: 9 test functions (13 collected cases) that run the generator for
+  real. `levix create-module weather` writes into a temporary directory; the test then registers
+  the result the way `pip install -e .` would (a hand-built `levix_weather-0.1.0.dist-info`, the
+  scaffold's `src/` on `sys.path`, the process-wide registry reset) and drives it through the real
+  router: `plugins info`, the module command itself, the lazy-import rule, the name rules, the
+  refusal to overwrite, and `--force` with a captured stdin - which must exit 6 and delete
+  nothing. The last case runs `pytest` **inside the generated project** in a child interpreter, so
+  a scaffold whose own tests fail cannot pass here. Writing this file found four defects in the
+  scaffold; see §Fixed.
 - `levix ai key set` / `levix ai key clear`: the write path for the provider credential,
   through `LevixContext.store_secret()` / `forget_secret()` to `secrets.set_secret()` /
   `delete_secret()`. The key is prompted with echoing off, so it never enters argv, the
@@ -223,26 +242,48 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `ruff format --check .` was red on two ADRs, because ruff 0.17 formats fenced Python inside
   Markdown and `docs/decisions/ADR-0002…` and `ADR-0003…` each held a snippet written by hand. CI
   only checks `src tests plugin-examples`, so the column never saw it; both snippets are now
-  re-wrapped in place, prose untouched, which makes the wider check clean at 123 files.
+  re-wrapped in place, prose untouched, which makes the wider check clean.
+- `levix create-module` emitted a project whose manifest was not its manifest. The template
+  wrote `permissions=frozenset({"Permission.FS_READ"})` - a **string** that looks like the enum
+  member - while `docs/architecture/PLUGIN_ARCHITECTURE.md` documented
+  `frozenset({Permission.FS_READ})`. Discovery accepted it, the router accepted it, and then
+  `levix plugins info <name>` asked the string for `.value` (`commands/plugins_cmd.py:84-85`, and
+  the dashboard reads `p.value` the same way at `dashboard/app.py:284-285`) and died in the
+  disclosure report - the one command whose whole job is to tell a user what a plugin claims.
+- The same template's command body interpolated `{display}`, a name that exists only inside the
+  generator's own f-string scope, so the generated `cli.py` raised
+  `NameError: name 'display' is not defined` on the module's first run. It now prints
+  `MANIFEST.title` with `markup=False`, which also stops a word typed at the prompt from being
+  read as a Rich style tag.
+- The scaffold's `README.md` told the author to run `levix <name> hello`. Typer mounts a
+  one-command app as the command itself, so click refused `hello` as an extra argument (exit 2)
+  while `levix <name> -h` still advertised it; the README now shows `levix <name>` and
+  `levix <name> you`, and `tests/test_create_module.py` asserts the string `hello` is absent from
+  it and that both real forms run.
+- The scaffold's own `tests/test_manifest.py` asserted `build_app()._name`, and Typer 0.27's
+  `Typer` has no `_name`, so a brand-new plugin was red on `pytest` before its author had written
+  a line. It asserts `build_app().info.name` now, and the generator's test case runs that
+  generated suite in a child interpreter so this class of drift cannot come back.
 
 ### Verification
 
 - `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests
-  plugin-examples` exit 0 (82 files already formatted, and the wider `.` scope is clean at 123
+  plugin-examples` exit 0 (84 files already formatted, and the wider `.` scope is clean at 125
   since the two ADR snippets were re-wrapped); bare `python -m mypy` exits 0 with no
   issues in 61 source files - `src/levix` plus the example plugin, which is what
   `[tool.mypy].files` declares and what CI now runs - and `--platform win32`, `--platform linux`
   and `--platform darwin` each report the same 61 clean, re-run against this tree because
-  `secrets._write_file` is in it.
+  `create_module_cmd._template` and `secrets._write_file` are in it.
 - The suite, on this machine: `.venv/Scripts/python.exe -m pytest -o addopts="" -q` runs
-  **593 test functions in 19 files, collecting 720 parametrised cases** and reports
-  **712 passed, 8 skipped, 2 warnings in 96.15 s**, exit 0. The same tree without the ten
+  **612 test functions in 21 files, collecting 743 parametrised cases** and reports
+  **735 passed, 8 skipped, 2 warnings in 115.34 s**, exit 0. The same tree without the ten
   `integration` cases - which is what every CI column runs - is
-  **702 passed, 8 skipped, 10 deselected in 88.10 s**, and those ten alone are
-  **10 passed, 710 deselected, 2 warnings in 9.27 s**. Eight skips, and each names its reason:
+  **725 passed, 8 skipped, 10 deselected in 101.64 s**, and those ten alone are
+  **10 passed, 733 deselected, 2 warnings in 10.77 s**. Eight skips, and each names its reason:
   five symlink cases in `tests/modules/test_files.py` (this account cannot create symlinks; three
   more state that POSIX symlinks need no privilege there) and the three POSIX-only permission
-  cases in `tests/test_secrets.py`, which is precisely what the next CI run is for. The two
+  cases in `tests/test_secrets.py`, which CI run #6 executed on the Ubuntu and macOS columns
+  instead of skipping. The two
   warnings are a NumPy 2.5 deprecation inside `sounddevice`, raised by the one real-device
   playback test. All three were run with one pytest process at a time; see
   `docs/roadmap/CURRENT_STATUS.md` §The flake, explained and closed for why that is said out loud.
@@ -295,7 +336,7 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
   exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
   is up to date when it could not ask.
-- **CI ran five times on 2026-11-05**, each time on the commit that changed it. Run #1
+- **CI ran six times on 2026-11-05**, each time on the commit that changed it. Run #1
   (`fcbcb22`): `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the
   no-extras install, the four exit-3 refusals and the wheel-content assertions are proven on
   a second platform; all four POSIX matrix columns stopped at `Types` on the Windows-only
@@ -323,17 +364,27 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   `::test_a_key_never_reaches_the_log_file` calls `setup()` for real, lets `RotatingFileHandler`
   open `levix.log`, writes three secret-shaped lines and reads the bytes back off disk; it is
   the only case in the CI set that opens a log file, and it passed on Ubuntu and macOS as well
-  as Windows.
-- What runs #4 and #5 do **not** prove: each column runs `pytest -m "not integration"`, so the ten
-  device and OS-tool cases still have only ever executed on Windows 11 here; no command has
+  as Windows. **Run #6 (`3d460df`, run id `42078880293`) is green the same way** - all seven jobs
+  `success`, the four steps individually `success` on all six columns. It is the first run that
+  carries `tests/test_secrets.py`, so its three POSIX-only cases - the ones that must `skip` on
+  this laptop because Windows derives `st_mode` from file attributes - ran on Ubuntu 3.12, Ubuntu
+  3.13, macOS 3.12 and macOS 3.13 without skipping, and none of those columns failed. The
+  `0600` the code asks `os.open` for is therefore a measured fact about POSIX filesystems rather
+  than a claim only this machine could make. Run #6's per-job annotations could not be read: the
+  unauthenticated API limit is 60 calls an hour and reading the seven job records spent it, so
+  this run is recorded from step conclusions alone.
+- What runs #4, #5 and #6 do **not** prove: each column runs `pytest -m "not integration"` - 710
+  of run #6's 720 cases - so the ten device and OS-tool cases still have only ever executed on
+  Windows 11 here; no command has
   been run by hand on Linux or macOS; and a green column says a branch was reached without
-  failing, not that the behaviour was asserted. The remaining POSIX items in
-  `docs/roadmap/CURRENT_STATUS.md` §What is not verified - real `ip addr show` / `ifconfig`
+  failing, not that the behaviour was asserted. The per-column pass and skip counts have never
+  been read, because an unauthenticated caller gets 403 for a run's log archive. The remaining
+  POSIX items in `docs/roadmap/CURRENT_STATUS.md` §What is not verified - real `ip addr show` /
+  `ifconfig`
   output, a real POSIX keyring, the platformdirs
-  layout under a real `$XDG_*` - have no test at all, on any platform. The *effect* of the
-  secrets-file permissions is no longer one of them in code: `tests/test_secrets.py` stats the
-  file, but its three POSIX cases skip on Windows and no run has executed them on a Linux or
-  macOS column yet. `release.yml` has
+  layout under a real `$XDG_*` - have no test at all, on any platform. The secrets-file
+  permissions are no longer one of them: `tests/test_secrets.py` stats the file, and run #6
+  executed the POSIX half of that on four columns. `release.yml` has
   never run, because the PyPI project and its trusted publisher do not exist yet.
 
 ## 0.4.0 - initial official modules

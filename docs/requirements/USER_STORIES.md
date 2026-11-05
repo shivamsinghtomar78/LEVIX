@@ -3,10 +3,12 @@
 Written against the 0.4.0 tree as it stands. The hand verification behind every line is
 Windows 11 with Python 3.12.10. GitHub Actions now executes the non-integration suite on
 Ubuntu and macOS too; its third run failed eight test functions that depend on the machine
-they run on, all eight were fixed, and its **fourth run (`5b047ad`) is green on all seven
+they run on, all eight were fixed, and its **fourth run (`5b047ad`), fifth (`75daed2`) and
+sixth (`3d460df`) are each green on all seven
 jobs**. So a story marked `Satisfied today` is a cross-platform result for the cases CI runs
 and still a Windows-only result for the ten `integration` cases and for anything a runner
-never asserts.
+never asserts. Run #6 is also the first that executed the POSIX file-mode cases of
+`tests/test_secrets.py` on Linux and macOS rather than skipping them here.
 `Satisfied today` names commands read in `src/levix`; `Verified by` names tests collected in
 `tests/`; `Not implemented` states plainly what is only partly met.
 Personas are the three in `PRD.md` §3: **DEV** (developer on their own machine),
@@ -380,14 +382,15 @@ wrapping `levix` is safe.
   `TERM=dumb` / a non-TTY stdout (`terminal.detect`). History is best-effort: any failure inside
   `main._record` is swallowed and cannot change your code.
 - Not implemented: the pipeline is **green** but not **complete**. `.github/workflows/ci.yml`
-  ran four times on 2026-11-05; its wheel job passed on Ubuntu each time, its third run was
+  ran six times on 2026-11-05; its wheel job passed on Ubuntu each time, its third run was
   the first whose suite result could be trusted (see `docs/technology/PYTHON_PACKAGING.md`)
   and failed all six matrix columns on eight tests that depend on the machine they run on,
-  and its **fourth run (`5b047ad`) is green on all seven jobs**. What is still missing is not
+  and its **fourth (`5b047ad`), fifth (`75daed2`) and sixth (`3d460df`) runs are green on all
+  seven jobs**. What is still missing is not
   a red column: the ten `integration` cases have run on no platform but Windows 11, no column
   asserts the POSIX items in `ACCEPTANCE_CRITERIA.md` §What is not verified, and
   `.github/workflows/release.yml` has never run because the PyPI project and its trusted
   publisher do not exist yet. The checks themselves are the
-  commands in `CONTRIBUTING.md` §Development workflow, and the 711-pass figure in `PRD.md` S4 was produced by
-  hand on Windows 11. `levix update` also presumes a published `levix`
+  commands in `CONTRIBUTING.md` §Development workflow, and the pass figure in `PRD.md` S4 was
+  produced by hand on Windows 11. `levix update` also presumes a published `levix`
   name on PyPI, which does not exist yet.

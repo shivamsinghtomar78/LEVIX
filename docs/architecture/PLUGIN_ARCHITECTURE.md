@@ -92,9 +92,17 @@ fiction" (`create_module_cmd.py:5`).
 |------|---------|
 | `pyproject.toml` | hatchling `>=1.33`, `name = "levix-<name>"`, `version = "0.1.0"`, `requires-python = ">=3.12"`, `license = "MIT"`, `dependencies = ["levix>=0.4"]`, `[project.entry-points."levix.plugins"] <name> = "levix_<name>:MANIFEST"`, `dev = ["pytest>=9", "ruff>=0.17"]`, wheel `packages = ["src/levix_<name>"]` |
 | `src/levix_<name>/__init__.py` | `MANIFEST` with one `CommandInfo(name="hello", …)`, `cli_path="levix_<name>.cli:build_app"`, `version="0.1.0"`, `requirements=()`, `permissions=frozenset({Permission.FS_READ})`, `documentation="README.md"`, plus a `build_app()` that imports `levix_<name>.cli` inside its body |
-| `src/levix_<name>/cli.py` | `typer.Typer(name, help=MANIFEST.summary, no_args_is_help=True)` with a `hello` command printing through `rich.console.Console` |
-| `README.md` | development install steps and the rule "Heavy imports belong inside command functions, never at module scope." |
-| `tests/test_manifest.py` | asserts `MANIFEST.name`, that `cli_path.endswith(":build_app")`, `command_names() == ("hello",)`, and that `build_app()._name` matches |
+| `src/levix_<name>/cli.py` | `typer.Typer(name, help=MANIFEST.summary, no_args_is_help=True)` with a `hello` command that prints `MANIFEST.title` plus the argument with `markup=False`, because the argument is the caller's text and Rich would read a `[/bold]` in it as a style tag |
+| `README.md` | development install steps and the rule "Heavy imports belong inside command functions, never at module scope." The usage it shows is `levix <name> [who]`: Typer mounts a **one-command** app as the command itself, so `levix <name> hello` is an extra-argument error even though `hello` is the function's name |
+| `tests/test_manifest.py` | asserts `MANIFEST.name`, that `cli_path.endswith(":build_app")`, `command_names() == ("hello",)`, and that `build_app().info.name` matches (`Typer` has no `_name`) |
+
+Every row above is executed, not described: `tests/test_create_module.py` runs the generator into
+a temp dir, registers the output through a hand-built `levix_weather-0.1.0.dist-info`, loads it
+with the real `ModuleRegistry`, runs `levix plugins info weather` and the module command through
+the real router, and finally runs the **generated** project's own `pytest` in a child
+interpreter. Writing that file is what found the four scaffold defects listed in
+`docs/roadmap/CURRENT_STATUS.md` §Defects found by reading the docs against the code - each one
+was invisible to a suite that generated the tree but never loaded it.
 
 Rules and guards:
 
@@ -158,7 +166,7 @@ environment as LEVIX, which is the only supported route, and `levix doctor` and
    `ModuleManifest` with new required fields fails at construction and becomes a broken
    manifest. That is the intended graceful outcome, but there is no warning before it.
 
-### Three gaps that used to be here are closed
+### Four gaps that used to be here are closed
 
 - **`LevixModuleProtocol` is gone.** It sat in `module.py`, exported through `levix.sdk`,
   declared `manifest()` / `build_command()` raising `NotImplementedError`, described itself as
@@ -182,3 +190,12 @@ environment as LEVIX, which is the only supported route, and `levix doctor` and
   (`create_module_cmd.py:74-75`), and `commands/plugins_cmd.py:1-8` names this page plus
   `docs/roadmap/CURRENT_STATUS.md`. There is no `docs/plugins/` directory and nothing
   references it.
+- **The scaffold is now executed, not just emitted.** Its docstring
+  (`create_module_cmd.py:3-5`)
+  has claimed since it was written that the generated tree "is exercised by tests"; that was
+  false until `tests/test_create_module.py` existed, because `tests/test_plugin_example.py`
+  proves the *checked-in example*, not what `_template` writes. Four defects died in that gap -
+  a `permissions` entry that was a string, a `{display}` interpolation that only the generator
+  could resolve, a README documenting a subcommand Typer does not mount, and a generated test
+  asserting a private `Typer._name`. Reading a template is not the same as loading what it
+  produces.

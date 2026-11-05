@@ -116,7 +116,7 @@ MANIFEST = ModuleManifest(
     version="0.1.0",
     commands=(CommandInfo(name="hello", help="Print a greeting."),),
     requirements=(),
-    permissions=frozenset({{"Permission.FS_READ"}}),
+    permissions=frozenset({{Permission.FS_READ}}),
     documentation="README.md",
 )
 
@@ -147,7 +147,10 @@ def build_app() -> typer.Typer:
         who: str = typer.Argument("world", help="Who to greet."),
     ) -> None:
         """Greet someone."""
-        console.print(f"[bold cyan]{{display}}[/bold cyan] says hello, {{who}}")
+        # `markup=False` because `who` is the caller's text: Rich would otherwise read a
+        # `[/bold]` typed at the prompt as a style tag. The SDK exposes no escaping helper
+        # yet, so the scaffold models the safe form rather than the handy one.
+        console.print(f"{{MANIFEST.title}} says hello, {{who}}", markup=False, style="bold cyan")
 
     return app
 ''',
@@ -162,7 +165,8 @@ python -m venv .venv
 . .venv/bin/activate    # Windows: .venv\\Scripts\\activate
 pip install -e .
 levix plugins list      # {name} should appear
-levix {name} hello
+levix {name}            # Typer mounts a one-command module directly, so there is no
+levix {name} you        # `hello` subcommand to type: the argument is the greeting target
 ```
 
 ## How it works
@@ -182,6 +186,6 @@ def test_manifest_shape() -> None:
 
 
 def test_app_builds() -> None:
-    assert build_app()._name == "{name}"
+    assert build_app().info.name == "{name}"
 """,
     }

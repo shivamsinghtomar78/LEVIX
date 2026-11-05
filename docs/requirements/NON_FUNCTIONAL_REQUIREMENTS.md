@@ -127,7 +127,7 @@ what is enforced.
 | ID | Requirement | Delivered by | Evidence |
 | --- | --- | --- | --- |
 | NFR-11.1 | No test touches a real user profile: the `levix_home` fixture deletes every `LEVIX_*` variable, sets `LEVIX_HOME`, disables file logging and forces `NO_COLOR=1`. | `tests/conftest.py` | file logging is disabled because an open handle makes Windows fail to delete the temp directory |
-| NFR-11.2 | Tests run the real entry point so exit codes and history are exercised, not just command bodies. | `tests/conftest.py::run_cli` → `levix.main.main(list(argv))` | `712 passed, 8 skipped` suite (five skips are symlink cases, three are the POSIX-only file-mode cases in `tests/test_secrets.py`) |
+| NFR-11.2 | Tests run the real entry point so exit codes and history are exercised, not just command bodies. | `tests/conftest.py::run_cli` → `levix.main.main(list(argv))` | the whole suite (735 passed, 8 skipped here; five skips are symlink cases, three are the POSIX-only file-mode cases in `tests/test_secrets.py`, which ran on the Ubuntu and macOS columns of CI run #6) |
 | NFR-11.3 | The registry is injectable, and reset before and after every test. | `registry.use`, `conftest._reset_registry` (autouse) | `tests/test_registry.py::test_active_registry_is_injectable_and_resettable` |
 | NFR-11.4 | The dashboard is tested headless with Textual's Pilot (`run_test(headless=True, size=(100, 30))`) because the suite runs where there is no terminal. | `tests/test_dashboard.py` header, `app.run_test` | 15 dashboard tests |
 | NFR-11.5 | Markers `integration` and `slow` are declared and `--strict-markers` is on; 10 tests are marked `integration`. | `pyproject.toml` `[tool.pytest.ini_options]` | no test uses `slow`. Three of the ten ask the machine which sound devices it has, which is what CI's headless runners cannot answer |
@@ -141,13 +141,14 @@ what is enforced.
   the message.
 - **POSIX behaviours are still unobserved.** CI run #4 (`5b047ad`) is green on Ubuntu and
   macOS, so the POSIX branches of the code the suite reaches do execute there — including the
-  `chmod` in `secrets._harden`. `tests/test_secrets.py` now closes the mode gap in code — it
-  stats `secrets.json`, refuses the `chmod` and overwrites a `0644` store — but those three
-  cases `skip` on Windows and no CI run has carried them onto a POSIX column, so the POSIX mode
-  is asserted-in-code and not yet observed on a POSIX runner. What still has no test at all is
+  `chmod` in `secrets._harden`. `tests/test_secrets.py` closes the mode gap in code — it
+  stats `secrets.json`, refuses the `chmod` and overwrites a `0644` store — and CI run #6
+  (`3d460df`) carried those three cases onto the Ubuntu and macOS columns, where they ran rather
+  than skipped and nothing failed. So the POSIX mode is observed on a POSIX runner; what is still
+  not observed anywhere is the keyring backend, the platformdirs layout under a real `$XDG_*`, and
   running the OS's own
   network tools and parsing their real output (`ip addr show`, `ifconfig`, `resolv.conf`,
-  `nsswitch.conf`, `route -n`), or exercising the POSIX keyring. The parsers are fed captured
+  `nsswitch.conf`, `route -n`). The parsers are fed captured
   POSIX text; that is a test of the parser, not of the platform.
 - **Coverage is configured but no threshold is enforced** (`[tool.coverage.run]` with
   `branch = true`; no `--cov` in `addopts`).

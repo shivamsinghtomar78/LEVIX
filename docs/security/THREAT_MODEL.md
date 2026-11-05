@@ -181,12 +181,15 @@ in a docstring stating that nothing here uses it. `subprocess.run` appears six t
 4. **No test asserts the absence of `shell=True` or of a network call at import time.** The
    tube option-absence tests and `tests/test_router.py`'s heavy-load check are the closest;
    a project-wide guard would be cheap and does not exist.
-5. **Asserted on Windows only.** CI run #4 (`5b047ad`) executes the tree on Ubuntu and macOS
-   and nothing there fails, so the POSIX *branches* are no longer unread. What still has no
-   observation behind it: `tests/test_secrets.py` now stats the mode of `secrets.json`, but its
-   three POSIX cases skip on this machine and no run has yet carried them onto the Linux and
-   macOS columns, so the mode is asserted-in-code and not yet asserted-on-a-POSIX-runner (the
-   Windows ACL case does run here, and reads the real `icacls` output); every
+5. **Asserted on Windows only, except where it is now asserted on POSIX too.** CI runs #4
+   (`5b047ad`), #5 (`75daed2`) and #6 (`3d460df`) execute the tree on Ubuntu and macOS
+   and nothing there fails, so the POSIX *branches* are no longer unread. Run #6 also closed the
+   one behaviour this page used to list as code-only: `tests/test_secrets.py` stats the mode of a
+   real `secrets.json`, and its three POSIX cases - which skip on this machine, where `st_mode`
+   answers `0o666` for any ordinary file - ran on the Ubuntu and macOS columns instead of skipping
+   and reached no failure. So the `0600` is now observed on a POSIX filesystem; the Windows half
+   (the real `icacls` output) has been asserted here all along. What still has no
+   observation behind it: every
    keyring test replaces `secrets._keyring` with a fake (`tests/modules/test_ai.py:568-599`,
    `:922-990`) so no OS keyring has ever been asked on any platform, and the suite runs under
    `LEVIX_HOME`, so `paths`' real POSIX layout is resolved with an override rather than the

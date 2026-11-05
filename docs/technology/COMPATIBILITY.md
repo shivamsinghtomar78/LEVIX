@@ -18,12 +18,16 @@ Everything in this repository was **built and hand-tested on Windows 11 (build
 in Git Bash. That is still the only environment any statement in the docs is
 *hand*-run against. GitHub Actions now executes the lint, the format check,
 `mypy` and `pytest -m "not integration"` on `ubuntu-latest`, `macos-latest` and
-`windows-latest` at Python 3.12 and 3.13; its fourth run (`5b047ad`) came back
+`windows-latest` at Python 3.12 and 3.13; its fourth run (`5b047ad`), fifth (`75daed2`) and
+sixth (`3d460df`) each came back
 **green on all seven jobs**, after the third run - the first one whose suite
 result could be trusted, see the `tee` story in
 `docs/roadmap/CURRENT_STATUS.md` - came back **red on all six columns, on eight
 test functions that depend on the machine**. So this tree's POSIX code paths are
-*executed* on Linux and macOS and have never failed there. That is a weaker claim
+*executed* on Linux and macOS and have never failed there. Run #6 is the one that first carried
+`tests/test_secrets.py`, so the three POSIX file-mode cases that skip here ran on Ubuntu and
+macOS instead of skipping - the only POSIX *behaviour* (as opposed to branch) this project has
+evidence for. That is a weaker claim
 than the table used to imply in the other direction, and a stronger one than
 "not run at all": a green column proves the branch was reached and nothing
 asserted otherwise, and the ten `integration` cases stay out of every column.
@@ -40,7 +44,7 @@ exercised rather than inferred.
 | ffmpeg install advice (`tube/core.py`) | `winget install Gyan.FFmpeg` | `sudo apt install ffmpeg` (fallback key) | `brew install ffmpeg` | strings are in the tree; **only the Windows branch's context was observed here** - `tests/modules/test_tube.py:193-202` checks the POSIX strings by calling `install_command_for(platform)` directly, so no POSIX host ever asked for them |
 | psutil sensors (`capabilities.py`, monitor) | runs; temperature often UNSUPPORTED on Windows | temperature sensors typically present | partially | the monitor suite swaps `psutil` for a stand-in; run #4 did execute the real-psutil `run_cli` cases on Linux and macOS, but **no assertion is about a POSIX sensor reading** |
 | keyring backends (`secrets.py`) | Windows Credential Store path | SecretService/libsecret (not installed/probed here) | macOS Keychain | **no real keyring on any platform**: every test replaces `secrets._keyring` with a fake (`tests/modules/test_ai.py:568-599`, `:922-990`) |
-| Secrets-file permissions (`secrets.py:128-139` and `_harden` at `:142-163`) | created `O_CREAT` at `0600`, then `chmod` and `icacls /inheritance:r /grant:r <user>:F`; `tests/test_secrets.py::test_the_acl_holds_one_explicit_grant_and_no_inherited_read` runs the real `icacls` and requires one grant, to this user, with nothing inherited | created `O_CREAT` at `0600`, then `chmod 0600`; three cases assert the mode - after a real write, with the `chmod` forced to fail, and over a store that already existed at `0644` | same as Linux | **the Windows ACL is asserted here; the three POSIX cases `skip` on this machine and no CI run has executed them yet**, so the POSIX mode is asserted-in-code, not asserted-on-a-POSIX-runner. `st_mode` on Windows reads `0o666` for any ordinary file, which is why the mode cases are POSIX-only instead of cross-checked |
+| Secrets-file permissions (`secrets.py:128-139` and `_harden` at `:142-163`) | created `O_CREAT` at `0600`, then `chmod` and `icacls /inheritance:r /grant:r <user>:F`; `tests/test_secrets.py::test_the_acl_holds_one_explicit_grant_and_no_inherited_read` runs the real `icacls` and requires one grant, to this user, with nothing inherited | created `O_CREAT` at `0600`, then `chmod 0600`; three cases assert the mode - after a real write, with the `chmod` forced to fail, and over a store that already existed at `0644` | same as Linux | **the Windows ACL is asserted here, and CI run #6 (`3d460df`) executed the three POSIX cases on Ubuntu 3.12/3.13 and macOS 3.12/3.13 without skipping and without failing** - so the POSIX mode is now asserted-on-a-POSIX-runner, not merely asserted-in-code. What is still unmeasured is *why* it holds on a given filesystem: no runner's umask, mount options or ACL default was read. `st_mode` on Windows reads `0o666` for any ordinary file, which is why the mode cases are POSIX-only instead of cross-checked |
 | Audio (PortAudio via sounddevice, tested integration) | real playback test ran here | run #3: `OSError: PortAudio library not found` | run #3: neither failed nor reported | **not executed** on either; the three device cases are `integration` and stay out of the matrix, because a headless runner's honest answer is "no devices" |
 | yt-dlp (stubbed in tests; no network in CI) | n/a | n/a | n/a | network path **not executed anywhere**; see `tests/modules/test_tube.py` docstring |
 
