@@ -429,7 +429,7 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
   exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
   is up to date when it could not ask.
-- **CI ran eight times on 2026-11-05**, each time on the commit that changed it. Run #1
+- **CI ran nine times on 2026-11-05**, each time on the commit that changed it. Run #1
   (`fcbcb22`): `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the
   no-extras install, the four exit-3 refusals and the wheel-content assertions are proven on
   a second platform; all four POSIX matrix columns stopped at `Types` on the Windows-only
@@ -494,10 +494,21 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   empty, where runs #4 and #5 had carried GitHub's own `actions/checkout` Node.js-20 deprecation
   warning and some runner notices, and this was again two API calls: the run list, then the job
   list.
-- What runs #4 through #8 do **not** prove: each column runs `pytest -m "not integration"` - 710
-  of run #6's 720 cases, 733 of run #7's 743, 738 of run #8's 748 - so the ten device and OS-tool
-  cases, and the 81 stream-visualiser cases that landed after `b748591`, have only ever executed on
-  Windows 11 here; no command has
+- **Run #9 (`2971bf9`, run id `42104375387`) is green the same way, and it is the run this
+  changelog entry needed.** All seven jobs `success`; `Lint`, `Format`, `Types` and `Test suite`
+  individually `success` on all six columns, both macOS columns with named runners; the wheel
+  job's six named steps `success`; annotations empty. It is the first run whose tree carries the
+  81 stream-visualiser cases, so the URL scheme gate, the cache containment, the byte cap, the
+  silent-logger rule and the spectrum arithmetic have executed on Ubuntu and macOS at Python 3.12
+  and 3.13 as well as here - every one of them except the three `music` `integration` cases, which
+  the selection deselects. The run took 2 m 22 s from creation to its last job completing against
+  run #8's 6 m 12 s, which is `cache: pip` doing its job: `2971bf9` leaves `pyproject.toml` alone,
+  so the dependency cache run #8 warmed still matches.
+- What runs #4 through #9 do **not** prove: each column runs `pytest -m "not integration"` - 710
+  of run #6's 720 cases, 733 of run #7's 743, 738 of run #8's 748, 819 of run #9's 829 - so the ten
+  device and screen cases (three `music` needing a device, two `arcade` and three `files`
+  driving a screen, two `hacker` running the OS's own network tools) have only ever
+  executed on Windows 11 here; no command has
   been run by hand on Linux or macOS; and a green column says a branch was reached without
   failing, not that the behaviour was asserted. The per-column pass and skip counts have never
   been read, because an unauthenticated caller gets 403 for a run's log archive. The remaining

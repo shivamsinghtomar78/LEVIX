@@ -180,7 +180,11 @@ Confirmed absent from this tree as of writing:
   state the workflows above reach, not today's. `levix update` therefore answers
   `could not check for updates: PyPI returned 404` and exits 8 - verified on this machine on
   2026-11-05 - because it refuses to imply you are up to date when it could not ask.
-- **A green matrix**: three runs, all on 2026-11-05, on the commits that added the files.
+- **A whole-suite run off this laptop.** The matrix itself is green - nine runs on 2026-11-05,
+  with #4 (`5b047ad`), #5 (`75daed2`), #6 (`3d460df`), #8 (`b748591`) and #9 (`2971bf9`, this
+  tree) each `success` on all seven jobs - but every column runs `-m "not integration"`, so the
+  ten `integration` cases have still never executed anywhere other than Windows 11 here. The
+  first three runs are the reason that sentence is written down at all.
   Run #1: the wheel job passed on Ubuntu in 31 s; the four POSIX columns died at `mypy` on a
   Windows-only stat attribute, and both Windows columns died inside the suite. Run #2
   reported "5 successful and 2 failing" and was wrong in both directions - Actions' default
@@ -190,7 +194,7 @@ Confirmed absent from this tree as of writing:
   redirects to a file instead of piping, and re-emits every `FAILED` line as a `::error::`
   annotation so a red column names itself to anyone, without a signed-in account. Run #3 is
   the first trustworthy result: red on all six columns, on eight test functions that depend
-  on the machine they run on. **Run #4 (`5b047ad`) is green on all seven jobs** - lint,
+  on the machine they run on. **Run #4 (`5b047ad`) is what closed them** - lint,
   format, types and the suite on six columns, plus this wheel job on Ubuntu - so the eight
   fixes are proven on the platforms that found them, and the hand-run figures quoted around
   these pages are no longer the only evidence in the tree. They still are for the ten

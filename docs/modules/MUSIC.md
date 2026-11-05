@@ -279,6 +279,13 @@ runner, not about this module.
 Not covered: the fetch against a real server (gap 8), true simultaneous-device
 behaviour, and the rendered animation (gap 11).
 
+CI run #9 (`2971bf9`) is the first run whose tree carried these cases, and all except the
+three `integration` ones are inside the `-m "not integration"` selection it runs, so they
+passed on Ubuntu, macOS and Windows at Python 3.12 and 3.13. What that does not say: a
+column's `Test suite` step reports an exit code, not a count - the per-column numbers have
+never been read, because the log archive needs a signed-in account - and a fake `yt_dlp`
+behaves the same on every platform, which is the point of the seam and also its limit.
+
 ## Known gaps
 
 1. **The whole file is decoded into memory before playback starts.** `core.load` calls
