@@ -230,7 +230,9 @@ The default system message asks for plain text:
 > `terminal may not render markdown, colour or non-ASCII glyphs, so do not use them.`
 
 Replies are printed with `markup=False, highlight=False`, so a model answer containing
-`[bold]` stays characters. Text the module *does* put through markup — the `models` table,
+`[bold]` stays characters, and on the console `terminal.new_console()` builds
+(`emoji=False`), so an answer containing `:abc:` stays characters instead of becoming the
+emoji whose shortcode that is. Text the module *does* put through markup — the `models` table,
 the `check` rows, a rejected proposal, a provider's own explanation — goes through
 `cli._show()` (`cli.py:58-69`), which is `escape(encode_safe(str(value)))`: Rich would
 otherwise read a `[4]` inside a model name as a style tag and delete it, a `[/weird]` would

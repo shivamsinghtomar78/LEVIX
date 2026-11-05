@@ -19,7 +19,6 @@ from pathlib import Path
 
 import typer
 from rich.box import ASCII
-from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
@@ -33,7 +32,7 @@ from ...errors import ConfigError, DependencyError
 from ...secrets import SERVICE, env_var_for
 from . import MANIFEST, core
 
-console = Console()
+console = terminal.new_console()
 
 PROVIDER_HELP = "Which API speaks: openai-compatible or ollama."
 

@@ -11,14 +11,13 @@ import time
 from collections.abc import Iterable, Sequence
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from ... import terminal
 from ...deps import gate
 from . import MANIFEST, core
 
-console = Console()
+console = terminal.new_console()
 
 app = typer.Typer()
 

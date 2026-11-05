@@ -44,12 +44,12 @@ Three rules hold everywhere else in the codebase:
 1. **Configuration never holds a secret.** `config.is_secret_key` matches any key whose
    last segment contains `key`, `token`, `secret` or `password`; `levix config set` refuses
    those keys, and `config show` / `config list` replace a non-empty value with `set, hidden`
-   (written markup-free in `commands/config_cmd.py:25-28`; the bracketed form was parsed by
+   (written markup-free in `commands/config_cmd.py:24-27`; the bracketed form was parsed by
    Rich as a style tag and the column rendered empty). No `SCHEMA` key is secret-shaped and
    an unknown key is rejected at load, so the mask is defence in depth -
    `tests/test_config.py::test_no_declared_key_is_secret_shaped` holds that line. `config
    get` is the one command that does not mask: it prints a warning and then the value it was
-   asked for (`commands/config_cmd.py:77-81`).
+   asked for (`commands/config_cmd.py:76-80`).
 2. **A secret is never an argument and never printed.** `levix ai key set` prompts with
    `hide_input=True`, because argv lands in shell history, in the process list and in crash
    reports. Nothing prints the value back: `levix ai key set` reports the store it used, and

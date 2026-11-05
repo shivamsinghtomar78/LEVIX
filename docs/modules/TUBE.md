@@ -178,7 +178,7 @@ failing the download.
    entries; there is no `--playlist-items`-style preview, so N unknown-size items become N
    downloads the moment `--playlist` is used.
 6. **A bad config value is silently replaced by the packaged default.** `_configured`
-   (`src/levix/modules/tube/cli.py:347-357`) catches `ConfigError`, `TypeError` and
+   (`src/levix/modules/tube/cli.py:346-356`) catches `ConfigError`, `TypeError` and
    `ValueError` and returns the fallback, on the reasoning that a broken `tube.output_dir`
    should not stop a download. The root callback validates `config.toml` before any command
    runs, so in normal use this branch is not reachable - but it is untested, and it means a

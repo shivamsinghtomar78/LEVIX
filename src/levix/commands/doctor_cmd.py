@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from .. import doctor as doctor_core
@@ -13,10 +12,10 @@ from ..capabilities import Status
 from ..context import LevixContext
 from ..errors import ConfigError
 from ..registry import active
-from ..terminal import markup_safe
+from ..terminal import markup_safe, new_console
 
-console = Console()
-console_err = Console(stderr=True)
+console = new_console()
+console_err = new_console(stderr=True)
 
 _STYLE = {
     Status.OK: "green",

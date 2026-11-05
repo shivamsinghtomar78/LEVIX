@@ -12,13 +12,12 @@ import shutil
 from pathlib import Path
 
 import typer
-from rich.console import Console
 
 from ..approve import require_approval
 from ..errors import ConfigError
-from ..terminal import markup_safe
+from ..terminal import markup_safe, new_console
 
-console = Console()
+console = new_console()
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,29}$")
 
 
@@ -147,10 +146,13 @@ def build_app() -> typer.Typer:
         who: str = typer.Argument("world", help="Who to greet."),
     ) -> None:
         """Greet someone."""
-        # `markup=False` because `who` is the caller's text: Rich would otherwise read a
-        # `[/bold]` typed at the prompt as a style tag. The SDK exposes no escaping helper
-        # yet, so the scaffold models the safe form rather than the handy one.
-        console.print(f"{{MANIFEST.title}} says hello, {{who}}", markup=False, style="bold cyan")
+        # `markup=False, emoji=False` because `who` is the caller's text: Rich runs two
+        # parsers over a printed str, and reads a `[/bold]` typed at the prompt as a style
+        # tag and a `:abc:` as the emoji whose shortcode that is. Escaping the brackets is
+        # half the job; the second half has no escape, so it is switched off.
+        console.print(
+            f"{{MANIFEST.title}} says hello, {{who}}", markup=False, emoji=False, style="bold cyan"
+        )
 
     return app
 ''',

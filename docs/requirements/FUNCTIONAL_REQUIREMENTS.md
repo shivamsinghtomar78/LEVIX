@@ -2,7 +2,7 @@
 
 Every requirement below describes behaviour that exists in the 0.4.0 tree. The
 `Where implemented` column is a real path or command; `Verified by` names a test that is
-collected today (664 test functions, 829 cases). Where nothing verifies a requirement it says
+collected today (667 test functions, 832 cases). Where nothing verifies a requirement it says
 **unverified** rather than guessing.
 
 Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means any of
@@ -113,7 +113,7 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 | FR-64 | Glyphs come from `terminal.active_glyphs()`, which returns an ASCII set when the stream cannot carry Unicode, because the Windows cp1252 writer raises on `U+2588`. | `src/levix/terminal.py` (`glyphs`, `bar`, `active_glyphs`) | `tests/test_terminal.py` (15 functions, 19 cases); observed ASCII bars in `levix monitor overview` when piped |
 | FR-65 | Colour is disabled by `NO_COLOR`, `LEVIX_NO_COLOR=1`, `TERM=dumb` or a non-TTY stdout. | `terminal.detect` | `tests/test_terminal.py`, `tests/conftest.py` (`NO_COLOR=1`) |
 | FR-66 | On Windows, ANSI is only emitted after `ENABLE_VIRTUAL_TERMINAL_PROCESSING` (0x0004) has been set through `GetConsoleMode`/`SetConsoleMode`; failure degrades instead of raising. | `terminal._windows_vt_enabled` | `tests/test_terminal.py` (unit-level) |
-| FR-67 | Anything dynamic that came from outside — a URL, file name, model reply, remote title, OS interface name — is markup-escaped and encoding-adapted before printing. The two helpers are `terminal.markup_safe` (brackets) and `terminal.encode_safe` (codepage), composed at each render site: `main._plain`, `tube/cli.py::_show`, `files/cli.py::show`, `systempulse/cli.py::_network_table` and every cell builder there, `hacker/cli.py`, the dashboard (`app.py`, `module_list.py`, `history.py`), `doctor_cmd`, `plugins_cmd`, `config_cmd`, `create_module_cmd`. | `src/levix/terminal.py` (`markup_safe`, `encode_safe`) | `tests/test_markup_safety.py` (9 functions: the renderer round-trip, an unbalanced tag raises, the config mask, doctor/plugin/dashboard/history surfaces), `tests/modules/test_files.py::test_printable_survives_a_name_the_console_cannot_encode`, `::test_preview_survives_a_name_the_console_cannot_encode`, `tests/modules/test_systempulse.py::test_an_interface_name_with_brackets_is_still_shown` |
+| FR-67 | Anything dynamic that came from outside — a URL, file name, model reply, remote title, OS interface name — is markup-escaped and encoding-adapted before printing, and is printed on a console whose emoji parser is off. The two string helpers are `terminal.markup_safe` (brackets) and `terminal.encode_safe` (codepage), composed at each render site: `main._plain`, `tube/cli.py::_show`, `files/cli.py::show`, `systempulse/cli.py::_network_table` and every cell builder there, `hacker/cli.py`, the dashboard (`app.py`, `module_list.py`, `history.py`), `doctor_cmd`, `plugins_cmd`, `config_cmd`, `create_module_cmd`. The console helper is `terminal.new_console` (`emoji=False`), which every console in `src/levix` is built by: `:abc:` is a live shortcode in Rich's table and no escape closes it, so a refused link used to come back with an emoji pasted into it and the sentence's own punctuation taken with it. | `src/levix/terminal.py` (`markup_safe`, `encode_safe`, `new_console`) | `tests/test_markup_safety.py` (12 functions: the renderer round-trip, an unbalanced tag raises, the config mask, doctor/plugin/dashboard/history surfaces, the shortcode round-trip, authored markup still renders, a refused link is quoted as typed), `tests/modules/test_files.py::test_printable_survives_a_name_the_console_cannot_encode`, `::test_preview_survives_a_name_the_console_cannot_encode`, `tests/modules/test_systempulse.py::test_an_interface_name_with_brackets_is_still_shown` |
 | FR-68 | Logs go to a rotating file (`levix.log`, 512 KB × 3 backups) and never to stdout; only when no file handler could be opened does a WARNING stream handler (stderr) appear. | `src/levix/logging_setup.py` | `tests/test_logging.py::test_a_key_never_reaches_the_log_file` (a real `levix.log` is written and read back), `::test_the_only_console_handler_writes_to_stderr` |
 | FR-69 | Redaction is a filter on the logger itself, so it cannot be bypassed by a module that logs a formatted exception: bearer headers, `sk-…`, `ghp_`/`gho_`/`github_pat_…` and `*key\|token\|secret\|password=…` pairs are replaced. | `logging_setup.RedactFilter` | `tests/test_logging.py` (6 functions, 11 cases) — the shapes, a real `LogRecord`, the file, and an unfiltered handler added afterwards. A credential in a shape the four patterns do not name is still logged verbatim (`NON_FUNCTIONAL_REQUIREMENTS.md` Known gaps) |
 | FR-70 | When stdout is redirected, interactive surfaces refuse instead of drawing: `dashboard` exits 2, `files browse` exits 1 and both name a pipe-friendly alternative. | `commands/dashboard_cmd.py`, `modules/files/browse.py::run_browse` | `tests/test_dashboard.py::test_dashboard_refuses_a_redirected_terminal_with_the_usage_code`, `tests/modules/test_files.py::test_browse_help_does_not_start_a_screen` |
@@ -168,7 +168,7 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 | --- | --- | --- | --- |
 | FR-98 | Seven read-only commands: overview, cpu, memory, disk, network, processes, live. The manifest declares `fs_read` only — nothing here writes or reaches the network. | `modules/systempulse/cli.py`, `modules/systempulse/__init__.py` | `tests/modules/test_systempulse.py` (40 functions / 46 collected): `::test_monitor_commands_run_and_exit_zero` drives all six non-`live` commands through the real CLI, `::test_the_live_view_terminates_on_its_own` bounds `live`, `::test_the_manifest_claims_only_disk_reads` |
 | FR-99 | psutil is imported only inside `core`, reached from command bodies. | `modules/systempulse/cli.py` docstring, `core.py` (`import psutil` inside each function) | `tests/test_router.py` heavy-import invariant (`psutil` in `HEAVY`); the per-function import is what lets `tests/modules/test_systempulse.py` put a stand-in module in `sys.modules` and still exercise the real import site, while the `run_cli` tests at the bottom of that file run against real psutil |
-| FR-100 | Where the OS exposes no sensor, the row says "unsupported here - no sensors exposed through psutil" or "not reported by this platform"; LEVIX never prints a invented zero. | `modules/systempulse/cli.py:85,96,98,119`, `capabilities.py` | observed: `temp` and `gpu` rows in `levix monitor overview` |
+| FR-100 | Where the OS exposes no sensor, the row says "unsupported here - no sensors exposed through psutil" or "not reported by this platform"; LEVIX never prints a invented zero. | `modules/systempulse/cli.py:84,95,97,118`, `capabilities.py` | observed: `temp` and `gpu` rows in `levix monitor overview` |
 
 ### hacker
 
@@ -235,7 +235,7 @@ Conventions: exit codes are the ones in `src/levix/errors.py`; `<module>` means 
 | FR-124 | Six commands: ask (`q`), explain, command (`cmd`), models, check, and `key` — a group with `set` and `clear` — over OpenAI-compatible or Ollama endpoints. `key set` prompts with echoing off; the key is never a command-line argument. | `modules/ai/cli.py` (`key_app`, `_prompt_key`), `ai/core.py` | `tests/modules/test_ai.py::test_openai_chat_request_sends_the_bearer_key_and_sse_accept`, `::test_ollama_streams_through_api_chat`, and the `key` surface itself: `::test_key_set_writes_the_keyring_and_never_prints_the_value`, `::test_key_set_falls_back_to_the_owner_only_file`, `::test_key_set_refuses_an_empty_entry_without_touching_the_store`, `::test_key_set_without_a_terminal_names_the_environment_variable`, `::test_key_clear_removes_what_key_set_wrote`, `::test_key_clear_says_the_environment_still_holds_a_key` |
 | FR-125 | The key is looked up as `AI_API_KEY` through env → keyring → file, never read from config, and `check` prints only the source. Loopback and Ollama endpoints are exempt from requiring a key. | `ai/core.py` (`SECRET_NAME`, `resolve_key`), `ai/cli.py::check` | `tests/modules/test_ai.py::test_resolve_key_refuses_a_remote_host_without_a_key`, `::test_no_key_anywhere_reports_none` |
 | FR-126 | A proposed command is parsed into an argv of at most one program; pipelines, `;` and redirection are refused before any approval is offered. | `ai/core.py::extract_proposal` | `tests/modules/test_ai.py::test_command_refuses_a_pipeline_proposal_before_any_approval` |
-| FR-127 | `--run` executes only after the typed word `RUN`; if `ai.require_approval` is set false the user is warned that LEVIX will run without asking. | `ai/cli.py:308-320` | `tests/modules/test_ai.py::test_command_yes_cannot_authorize_a_run` |
+| FR-127 | `--run` executes only after the typed word `RUN`; if `ai.require_approval` is set false the user is warned that LEVIX will run without asking. | `ai/cli.py:307-319` | `tests/modules/test_ai.py::test_command_yes_cannot_authorize_a_run` |
 | FR-128 | Provider failures (non-2xx, timeout, malformed body, stream error) are `ProviderError` exit 8 and name the provider and URL, never the key. | `ai/core.py` | `tests/modules/test_ai.py::test_non_2xx_maps_to_provider_error`, `::test_connection_failure_names_the_provider_and_url` |
 | FR-129 | `explain` reads a capped prefix of each file (default 32,000 bytes) and says what it left out. | `ai/core.py` (`DEFAULT_MAX_FILE_BYTES`), `ai/cli.py` | `tests/modules/test_ai.py` explain tests |
 | FR-130 | `models` prints what the provider reports, or states that the provider reported none (a 404 returns no list rather than an error). | `ai/core.py::fetch_models` | `tests/modules/test_ai.py::test_parse_models_reads_both_shapes` |
@@ -277,7 +277,7 @@ Requirements the code does not meet as written, or that no test holds:
   tested here. Real TTY behaviour — the dashboard on a screen, `files browse`, `monitor live`,
   `hacker matrix` animating, playing Snake by key — is exercised only through Textual's Pilot.
 - FR-73: the typed words `DELETE`, `OVERWRITE` and `RUN` are asserted through the non-TTY
-  refusal, not by a human typing them at a prompt (`approve.py:51-59` has no interactive test).
+  refusal, not by a human typing them at a prompt (`approve.py:50-58` has no interactive test).
   FR-118 and FR-127 are the same situation for Arcade and AI.
 
 ## Closed since the first draft of this page
@@ -296,12 +296,12 @@ Each of these was a real gap and is now either implemented or removed from the r
   `levix stub note via-alias`; `levix q hello` works. Held by
   `tests/test_router.py::test_a_command_alias_reaches_the_command_it_names` and
   `::test_the_alias_help_shows_the_page_of_the_command_it_aliases`.
-- FR-38: `levix ai key set` / `key clear` exist (`modules/ai/cli.py:519-594`, nine tests in
+- FR-38: `levix ai key set` / `key clear` exist (`modules/ai/cli.py:518-593`, nine tests in
   `tests/modules/test_ai.py` from `::test_key_set_writes_the_keyring_and_never_prints_the_value`
   to `::test_key_clear_says_the_environment_still_holds_a_key`), so the refusal message now
-  points at a command that is there. `ai/core.py:156` and `ai/cli.py:541` both name it.
+  points at a command that is there. `ai/core.py:156` and `ai/cli.py:540` both name it.
 - FR-39: `config reset --yes` can no longer delete a configuration without a typed word —
-  `commands/config_cmd.py:132-137` calls `require_approval(..., destructive=True)`, which
+  `commands/config_cmd.py:131-136` calls `require_approval(..., destructive=True)`, which
   refuses to let a flag authorise a destructive action. `tests/test_config.py:197` asserts the
   refusal exits 6. The inert `--yes` on `config set` was removed instead of wired up: that
   command never prompts, so accepting the flag promised a behaviour it did not have.
@@ -309,7 +309,7 @@ Each of these was a real gap and is now either implemented or removed from the r
   `defaults.toml` instead of being plumbed in. `require_approval` is the only gate, by design
   (`src/levix/config.py:86` records why).
 - FR-91/FR-92/FR-93: `tests/test_doctor.py` (6 functions) exists, and `--only` really filters —
-  `commands/doctor_cmd.py:43-54` applies the prefix it computes. A filtered `--json` verdict is
+  `commands/doctor_cmd.py:42-53` applies the prefix it computes. A filtered `--json` verdict is
   computed from the rows actually shown.
 - FR-98/FR-99: `tests/modules/test_systempulse.py` exists — 40 functions, 46 collected cases —
   sampling against a psutil stand-in in `sys.modules` and the commands against the real machine.
@@ -318,9 +318,15 @@ Each of these was a real gap and is now either implemented or removed from the r
   installed into this environment appears (`src/levix/dashboard/app.py:115`).
 - FR-67: the escaping rule was not just documented but closed. OS-sourced values — process
   names, mount points, interface names — go through `terminal.markup_safe` at every render site
-  (`tests/test_markup_safety.py`, 9 functions, plus
+  (`tests/test_markup_safety.py`, 12 functions, plus
   `tests/modules/test_systempulse.py::test_an_interface_name_with_brackets_is_still_shown`), and
   the config mask stopped being a Rich style tag.
+- FR-67, the face the brackets rule missed: Rich also reads `:name:` in a printed `str` as an
+  emoji shortcode, and escaping cannot prevent that. Every console in `src/levix` now comes from
+  `terminal.new_console()` (`emoji=False`), the scaffold and the shipped example plugin print with
+  `emoji=False`, and the three last tests of `tests/test_markup_safety.py` are that change -
+  including the real `levix music play magnet:abc` refusal, which quoted its own argument wrongly
+  until this landed.
 - FR-131/FR-132: `module.LevixModuleProtocol` is deleted. It declared `manifest()` and
   `build_command()`, raised `NotImplementedError` in both, was exported through `levix.sdk`,
   was implemented by nothing in the tree — including the scaffold its own docstring claimed —

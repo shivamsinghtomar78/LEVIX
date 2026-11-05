@@ -154,7 +154,7 @@ re-emitted through the escaping conventions in `CORE_ENGINE.md`, so a URL contai
    that takes a secret as an argument would leave it in the shared database and in the
    dashboard's history panel. No command in the tree accepts a credential as an argument
    today: `levix ai key set` reads the key with `typer.prompt(..., hide_input=True)`
-   (`modules/ai/cli.py:512-528`), so the row this command writes is `ai key set` with no
+   (`modules/ai/cli.py:511-527`), so the row this command writes is `ai key set` with no
    value in it, and `config set` refuses secret-shaped keys before anything is stored. That
    makes the exposure structural rather than live — a plugin that took a key as a flag
    would land it in `levix.db` and on screen, because nothing redacts at write time, unlike

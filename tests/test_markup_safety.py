@@ -5,6 +5,11 @@ plugin's own summary, a filename with brackets, a line of command history. Unesc
 bracketed part does not raise - it disappears, so the user reads a different command or a
 different claim than the one shipped. Each test renders through the real Rich console and
 asserts the literal comes back.
+
+Rich's console has a second parser over a printed `str`, and it takes a colon instead of a
+bracket: `:abc:` is the emoji whose shortcode that is. That one is closed on the console
+(`terminal.new_console`), not on the string, so the last three tests here go through the
+console the commands build.
 """
 
 from __future__ import annotations
@@ -142,6 +147,41 @@ def test_history_lines_survive_the_markup_parser(levix_home):
     context.database.log_command(("[vid]movie", "download", "[vid]movie"), "[vid]movie", 0, 1.0)
     lines = recent_lines(context.database, limit=5)
     assert "[vid]movie" in _render("\n".join(lines))
+
+
+def test_an_emoji_shortcode_reaches_the_screen_as_colons(capsys):
+    """Rich's *second* parser over a printed `str`: `:name:` becomes that emoji.
+
+    `markup_safe` cannot close this one, because there is no way to write a colon that
+    means itself - the fix has to be on the console. `abc` is a real shortcode (U+1F524),
+    which is why the fixture is a link whose scheme is followed by a word and not a
+    made-up string.
+    """
+    from levix import terminal
+
+    terminal.new_console().print("cannot fetch the magnet: link magnet:abc: only http")
+    printed = capsys.readouterr().out
+    assert "magnet:abc:" in printed
+    assert "\U0001f524" not in printed
+
+
+def test_the_console_that_refuses_emoji_still_renders_the_markup_levix_authors(capsys):
+    """The fix is a switched-off parser, not a switched-off renderer."""
+    from levix import terminal
+    from levix.terminal import markup_safe
+
+    terminal.new_console().print(
+        f"[bold red]error:[/bold red] {markup_safe('pip install "levix[tube]"')}"
+    )
+    assert 'error: pip install "levix[tube]"' in capsys.readouterr().out
+
+
+def test_a_refused_link_is_quoted_back_as_it_was_typed(run_cli, capsys):
+    """The way a user reaches this defect: a link on the command line, named in its own
+    refusal. Everything after the eaten colon used to be pulled up with it."""
+    assert run_cli("music", "play", "magnet:abc") == 2
+    printed = " ".join(capsys.readouterr().err.split())
+    assert "magnet:abc" in printed
 
 
 def _install(manifest: ModuleManifest) -> None:

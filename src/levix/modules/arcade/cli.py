@@ -17,9 +17,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
+from ... import terminal
 from ...approve import require_approval
 from ...context import LevixContext
 from ...deps import gate
@@ -32,7 +32,7 @@ from .scores import ArcadeUsage
 if TYPE_CHECKING:
     from ...storage import Database
 
-console = Console()
+console = terminal.new_console()
 
 #: A board this big is already past what a terminal shows; bigger asks are mistakes.
 MAX_COLS = 120

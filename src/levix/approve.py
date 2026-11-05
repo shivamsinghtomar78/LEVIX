@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import sys
 
-from rich.console import Console
-
 from .errors import UserCancelledError
+from .terminal import new_console
 
-_ERR = Console(stderr=True)
+_ERR = new_console(stderr=True)
 
 
 def require_approval(

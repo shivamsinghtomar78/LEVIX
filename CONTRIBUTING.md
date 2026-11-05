@@ -35,7 +35,10 @@ pre-commit install
    (`pip install "levix[tube]"`), a plugin's summary, a filename, a line of command
    history: Rich reads `[...]` as a style tag and deletes it. Use
    `levix.terminal.markup_safe` when interpolating into a markup string, or print with
-   `markup=False`. `tests/test_markup_safety.py` is the regression net.
+   `markup=False`. Rich runs a second parser over the same `str` — `:abc:` is the emoji
+   whose shortcode that is — and no escape closes it, so switch it off instead:
+   `levix.terminal.new_console()` for a console you build, `emoji=False` on the print call
+   for one you were handed. `tests/test_markup_safety.py` is the regression net.
 
 ## Development workflow
 
@@ -43,9 +46,9 @@ pre-commit install
 ruff check src tests plugin-examples
 ruff format src tests plugin-examples
 mypy                                # [tool.mypy].files already includes plugin-examples
-pytest                          # all 829 cases; no network, no real TTY
+pytest                          # all 832 cases; no network, no real TTY
 pytest -m integration           # only the 10 that touch a device or a real OS tool
-pytest -m "not integration"     # the CI-safe subset (819 cases)
+pytest -m "not integration"     # the CI-safe subset (822 cases)
 levix doctor
 ```
 

@@ -101,13 +101,18 @@ names = {klass.__name__ for klass in type(exc).__mro__}
 | Function | Output | Rule |
 |----------|--------|------|
 | `_render_error(exc)` | `error: <message>` on stderr, bold red label; then `hint: <hint>` in dim, **only when `hint and hint not in exc.message`** | prevents the duplication seen when a `DependencyError` builds its install line into the message and also passes it as `hint` |
-| `_plain(value)` | `"\n".join(escape(encode_safe(line)) for line in str(value).splitlines())` (`main.py:108-124`) | closes two crashes at once, per its docstring: Rich reads the `[...]` inside a typed URL, path or module name as a style tag and deletes it, and a cp1252 console raises `UnicodeEncodeError` on a name it cannot encode — "the report would no longer match the thing that failed". Line by line, because `encode_safe` is one-line by design: a message LEVIX authored with a break in it keeps that break |
+| `_plain(value)` | `"\n".join(escape(encode_safe(line)) for line in str(value).splitlines())` (`main.py:108-124`) | closes two crashes at once, per its docstring: Rich reads the `[...]` inside a typed URL, path or module name as a style tag and deletes it, and a cp1252 console raises `UnicodeEncodeError` on a name it cannot encode — "the report would no longer match the thing that failed". Line by line, because `encode_safe` is one-line by design: a message LEVIX authored with a break in it keeps that break. It closes nothing else, and that is deliberate: Rich's second parser over a printed `str` reads `:abc:` as the emoji whose shortcode that is, and there is no escaping for a colon that means itself — that one is switched off on the console, two rows below |
 | `_show_alternatives(name)` | `unknown command: <name>` plus `available: <sorted module names>` plus a pointer to `levix -h` | wrapped in `try/except` — "a hint must never replace the real error"; if discovery fails the hint is simply skipped |
 | `_show_click(exc)` | `exc.show()`, falling back to `<Type>: <exc>` | the vendored `show()` may itself fail on a dumb terminal |
 | `_report_unexpected(exc, args)` | logs with `exc_info=True`, prints type, message, the LEVIX-bug sentence, then `_plain(traceback)[-1500:]` | the tail, not the whole, because a chained traceback from Typer is kilobytes |
 
-All five print through `Console(stderr=True, highlight=False)`: diagnostics never go to
-stdout, so `levix config list ai | grep …` is not polluted by a warning.
+All five print through `terminal.new_console(stderr=True, highlight=False)`
+(`terminal.py:160-176`), which is `Console(..., emoji=False)`: diagnostics never go to
+stdout, so `levix config list ai | grep …` is not polluted by a warning, and the text the
+report quotes back is the text that was typed. Before that console was a factory, `levix
+music play magnet:abc` named the link it refused as `magnet` + U+1F524 + ` only http and
+https are played from a URL` — `:abc:` is a live shortcode in Rich's table and the colon
+that ended the sentence went with it (`tests/test_markup_safety.py::test_a_refused_link_is_quoted_back_as_it_was_typed`).
 
 ## Module behaviour under failure
 
@@ -179,7 +184,7 @@ finally:
    is told to pick a module when the fix is `levix monitor -h`. This is the same
    mechanism as the intended `levix nostalgia` → 4 path.
 3. **`UnknownModuleError` is never raised.** Exit 4 comes from `_classify`'s regex path and
-   from `plugins info` raising `typer.Exit(code=4)` directly (`plugins_cmd.py:71-73`). The
+   from `plugins info` raising `typer.Exit(code=4)` directly (`plugins_cmd.py:70-72`). The
    class exists for API completeness, so a plugin author who raises it expecting `hint`
    rendering gets a correct code but nothing else that is not already available.
 4. **`EXIT_RUNTIME` is the default for `LevixError`**, so a module that subclasses

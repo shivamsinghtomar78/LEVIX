@@ -17,7 +17,7 @@ import time
 from collections.abc import Sequence
 
 import typer
-from rich.console import Console, Group
+from rich.console import Group
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
@@ -27,7 +27,7 @@ from ...deps import gate
 from ...errors import ConfigError
 from . import MANIFEST, core
 
-console = Console()
+console = terminal.new_console()
 
 
 def _show(value: object) -> str:

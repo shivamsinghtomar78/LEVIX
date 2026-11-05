@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 import typer
-from rich.console import Console, Group
+from rich.console import Group
 from rich.live import Live
 from rich.markup import escape
 from rich.table import Table
@@ -33,7 +33,7 @@ from . import MANIFEST, core, visual
 if TYPE_CHECKING:
     import numpy as np
 
-console = Console()
+console = terminal.new_console()
 
 playlist_app = typer.Typer(
     name="playlist",

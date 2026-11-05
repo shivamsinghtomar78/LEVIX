@@ -21,7 +21,7 @@ app = typer.Typer(
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
-console = Console(highlight=False)
+console = Console(highlight=False, emoji=False)
 
 
 def build_app() -> typer.Typer:
@@ -51,9 +51,10 @@ def greet(
 ) -> None:
     obj = _context(ctx)
     arrow = obj.glyph("arrow")
-    # Rich reads the `[...]` inside anything a human typed as a style tag and deletes it,
-    # so the value is escaped before it reaches markup. The same rule applies to every
-    # name, path or title a module prints.
+    # Rich runs two parsers over a printed str: `[...]` is a style tag, which the escape
+    # below closes, and `:name:` is an emoji shortcode, which no escape closes - that one
+    # is switched off on the console above. The same rule applies to every name, path or
+    # title a module prints, and this example is what plugin authors copy.
     who = escape(name)
     theme = escape(str(obj.value("general.theme")))
     for _ in range(times):

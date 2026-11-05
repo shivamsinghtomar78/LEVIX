@@ -1,8 +1,8 @@
 # LEVIX Acceptance Criteria
 
 Each criterion states behaviour asserted by a named test in `tests/` or observable from a documented command. Exit codes are the table in
-`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 664 test functions in 21 files (14 in `tests/`, 7 in `tests/modules/`)
-collecting to 829 parametrised cases, 10 marked `integration`; the hand run behind every line below is `821 passed, 8 skipped`. Eight skips,
+`src/levix/errors.py`: 0, 1, 2, 3, 4, 5, 6, 7, 8, 130. The suite holds 667 test functions in 21 files (14 in `tests/`, 7 in `tests/modules/`)
+collecting to 832 parametrised cases, 10 marked `integration`; the hand run behind every line below is `824 passed, 8 skipped`. Eight skips,
 each naming its reason: five symlink cases - this Windows account cannot `os.symlink`, and three of them are POSIX-only by design - and the
 three POSIX-only file-mode cases of `tests/test_secrets.py`, which CI runs #6 (`3d460df`), #8 (`b748591`) and #9 (`2971bf9`)
 executed on the Ubuntu and macOS columns instead of skipping them.
@@ -17,18 +17,20 @@ jobs are `success` and `macos-latest / Python 3.12` was `cancelled` before any s
 hosted runner was acquired for it; that same column got a machine in run #8 and in run #9. So the lines below
 are cross-platform results for the `-m "not integration"` set as it stood on the tree each run
 covered - 710 cases on run #6's (`3d460df`, all six columns), 733 on run #7's (`c49d608`, five
-columns), 738 on run #8's (`b748591`, all six) and **819 on run #9's (`2971bf9`, all six), which
-is this tree** - and Windows-only results for the ten `integration` cases (three `music` ones
+columns), 738 on run #8's (`b748591`, all six) and **819 on run #9's (`2971bf9`, all six)** - and Windows-only results for the ten `integration` cases (three `music` ones
 that need a real device, two `arcade` and three `files` ones that drive a screen, two `hacker`
 ones that read the machine's own network configuration), for every hand
 run quoted below, and for anything a runner never asserts, which
-§What is not verified lists.
+§What is not verified lists. The tree these pages describe is run #9's plus one change - the
+console every command prints through, and the twelve cases of `tests/test_markup_safety.py`
+that hold it (three are new) - so the last of those twelve is proven here, on Windows, and not
+yet on a column. Nothing below claims a cross-platform result for them.
 `tests/conftest.py` keeps runs
 off a real profile (`LEVIX_*` cleared, `LEVIX_HOME` in a temp directory, `NO_COLOR=1`, file logging disabled at `conftest.py:38`, registry
 reset per test) and `run_cli` calls the real entry point `levix.main.main(list(argv))`, so exit codes and history rows are part of what is
-asserted. Checks: `python -m pytest -o addopts="" -q` (829 collected, `821 passed, 8 skipped, 2 warnings in 123.32 s`, no network, no real TTY - and yes, that includes the 10
-`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `811 passed, 8 skipped, 10 deselected in 100.90 s`), `python -m pytest -m integration` (those 10 alone: `10 passed, 819
-deselected, 2 warnings in 10.85 s`), `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests plugin-examples` (both exit 0,
+asserted. Checks: `python -m pytest -o addopts="" -q` (832 collected, `824 passed, 8 skipped, 2 warnings in 130.31 s`, no network, no real TTY - and yes, that includes the 10
+`integration` cases, because `addopts = "-q --strict-markers"` deselects nothing), `python -m pytest -m "not integration"` (what CI runs: `814 passed, 8 skipped, 10 deselected in 121.99 s`), `python -m pytest -m integration` (those 10 alone: `10 passed, 822
+deselected, 2 warnings in 8.96 s`), `python -m ruff check src tests plugin-examples` and `python -m ruff format --check src tests plugin-examples` (both exit 0,
 85 files already formatted), `python -m mypy` (62 files - `[tool.mypy].files` also covers the example plugin - no issues) and the same with
 `--platform win32`, `--platform linux` and `--platform darwin`, `levix doctor`. Citations: a bare `file.py:line` is under `src/levix/`; `tests/FILE.py` names a test file (module tests are
 `tests/modules/FILE.py`) and each identifier after it is one of its test functions.
@@ -68,7 +70,7 @@ runs, then the code is 2 and the prefix is `levix stub`; a bare group prints hel
 one escapes to `main`, then `LevixError` keeps its code, `KeyboardInterrupt` is 130, `SystemExit` its own code, and the rest is matched by MRO
 class name, not `isinstance`: `Abort` to 130, `Exit` to its `exit_code`, `UsageError`/`BadParameter` to 4 when the message says "No such
 command" else 2, `ClickException` to its own code (2 in click, 1 if absent). An unrecognised exception prints "unexpected error", the type, a
-pointer to `levix doctor` and the last 1500 traceback characters at exit 1. Check: `main.py:61-96`, `main.py:145-170` (asserted by no test,
+pointer to `levix doctor` and the last 1500 traceback characters at exit 1. Check: `main.py:61-96`, `main.py:144-169` (asserted by no test,
 `PRD.md` FR-31).
 
 **AC-07 — the codes modules produce in practice.** Given stubbed boundaries: refused confirmation 6, external tool 7, provider 8, Ctrl+C 130,
@@ -94,11 +96,11 @@ out-of-range value, when any command loads configuration, then the code is 5 and
 just that key, `reset` keeps a `config.toml.bak`, and a key whose last component holds `key`, `token`, `secret` or `password` is refused with
 5 and masked in `show`/`list` as `set, hidden` (no brackets — the mask goes into a Rich table cell, where `[set, hidden]` parsed as a style tag
 and printed nothing); an unreadable value inside Tube falls back to the documented default instead of aborting the download. Check:
-`config.py:280-296`, `commands/config_cmd.py:28,48,68,92`, `modules/tube/cli.py:348-357`, `tests/modules/test_tube.py`
+`config.py:280-296`, `commands/config_cmd.py:27,47,67,91`, `modules/tube/cli.py:347-356`, `tests/modules/test_tube.py`
 `test_the_configured_directory_is_used_when_no_flag_is_given`, `tests/test_config.py::test_config_set_refuses_a_key_that_looks_like_a_credential`,
 `tests/test_markup_safety.py::test_the_config_mask_reaches_the_screen_as_words`.
 Both gaps this criterion used to carry are closed: `config set` no longer accepts a `--yes` it never read, and
-`config reset --yes` now goes through `require_approval(..., destructive=True)` (`commands/config_cmd.py:132-137`), asserted by
+`config reset --yes` now goes through `require_approval(..., destructive=True)` (`commands/config_cmd.py:131-136`), asserted by
 `tests/test_config.py::test_reset_yes_cannot_delete_a_configuration_without_a_typed_word`.
 
 ## D. Storage and history
@@ -108,13 +110,13 @@ every table lives in `<data>/levix.db`, each connection sets `journal_mode=WAL` 
 calls hand out different objects; `apply_migrations(("core",))` run twice returns `[]`, every namespace is declared even when empty, Arcade
 and Music fill only their own slots; `levix doctor --vacuum` runs `VACUUM` with the history intact. Check: `tests/test_storage.py`
 `test_the_shared_database_uses_wal_and_a_busy_timeout`, `test_a_connection_is_not_reused_across_calls`, `test_migrations_are_idempotent`,
-`test_a_module_registers_its_migration_into_its_reserved_slot`, `test_vacuum_runs_on_the_shared_file`; `commands/doctor_cmd.py:36-38`.
+`test_a_module_registers_its_migration_into_its_reserved_slot`, `test_vacuum_runs_on_the_shared_file`; `commands/doctor_cmd.py:35-37`.
 
 **AC-12 — history is newest-first, bounded and cannot break a run.** Given several runs, when `levix` writes history, then rows carry argv,
 module, exit code, duration and a UTC timestamp; `prune_history(3)` keeps the newest and reports the dropped count; a failure inside `_record`
 never changes the user's exit code. Check: `tests/test_storage.py` `test_history_round_trips_in_newest_first_order`,
 `test_prune_keeps_the_newest_rows_and_reports_what_it_dropped`; `tests/test_router.py` `test_a_run_command_is_written_to_the_shared_history`.
-The "first token starting with `-` is skipped" rule (`main.py:184`) has no test, contrary to `FUNCTIONAL_REQUIREMENTS.md:82`.
+The "first token starting with `-` is skipped" rule (`main.py:183`) has no test, contrary to `FUNCTIONAL_REQUIREMENTS.md:82`.
 
 ## E. Terminal safety: cp1252 and Rich markup
 
@@ -127,7 +129,7 @@ degrades instead of raising. Check: `tests/test_terminal.py` `test_a_codepage_te
 
 **AC-14 — outside text is escaped and flattened.** Given a file name, site title or model reply containing `[bold]`, a control character or a
 character this console cannot encode, when LEVIX prints it, then the markup is not interpreted, the value stays on one line, unencodable
-characters come back as `\uXXXX`/`\xNN`, and no `UnicodeEncodeError` is raised. Check: `main.py:108-120` (`_plain`), `terminal.py:121-138`
+characters come back as `\uXXXX`/`\xNN`, and no `UnicodeEncodeError` is raised. Check: `main.py:108-120` (`_plain`), `terminal.py:125-142`
 (`encode_safe`), `tests/modules/test_files.py` `test_printable_survives_a_name_the_console_cannot_encode`.
 
 **AC-15 — captured streams get a bound or a refusal.** Given stdout is a pipe, when `levix hacker matrix` runs with neither `--iterations`
@@ -187,7 +189,7 @@ alias, which is the `greet` command itself), the same command runs three times; 
 **AC-22 — installing a plugin is pip, and nothing else.** Given a new plugin, when its author runs `pip install -e .`, then
 `levix plugins list` shows it and `levix <name>` works; there is no `plugins install`, `uninstall` or `publish`, and `plugins info` on an
 unknown name exits 4. Check: `commands/plugins_cmd.py:1-8` (the deliberate omission), `plugin-examples/hello/README.md:10-21`.
-`levix create-module` scaffolds the project (`create_module_cmd.py:79-191`), and
+`levix create-module` scaffolds the project (`create_module_cmd.py:78-193`), and
 `tests/test_create_module.py` generates it into a temp dir, registers it the way `pip install -e .`
 would and runs it through the real router - but no case invokes pip, so the resolution of
 `dependencies = ["levix>=0.4"]` against an index is not what is proven here.
@@ -208,7 +210,7 @@ run", and no approval prompt is reached. Check: `tests/modules/test_ai.py` `test
 
 **AC-25 — `--yes` never authorises a destructive action.** Given `files delete`, `files copy --force`, `game scores --clear` or
 `ai command --run`, when `--yes`/`-y` is passed with stdin not a terminal, then the code is 6, the message contains "--yes cannot authorize",
-and the target is unchanged. Check: `approve.py:34-49`, `tests/modules/test_files.py` `test_delete_yes_cannot_authorize_a_deletion`,
+and the target is unchanged. Check: `approve.py:33-48`, `tests/modules/test_files.py` `test_delete_yes_cannot_authorize_a_deletion`,
 `test_copy_with_force_still_needs_a_terminal`; `tests/modules/test_arcade.py`
 `test_a_clear_needs_the_typed_word_and_yes_cannot_supply_it`; `tests/modules/test_ai.py` `test_command_yes_cannot_authorize_a_run`. Not
 acceptable as documented: no configuration key turns the gate on or off — the
@@ -218,9 +220,9 @@ gate always asks", not "the gate honours a setting".
 
 **AC-26 — every destructive prompt asks for a typed word.** Given a real terminal, the words are `DELETE` (`files delete`,
 `game scores --clear`), `OVERWRITE` (copy/move/rename collisions) and `RUN` (an AI proposal), and `create-module --force` does go through the
-same gate before its `shutil.rmtree` (`create_module_cmd.py:50-55`); anything else exits 6. Check: `approve.py:51-59`,
-`modules/files/cli.py:340-353,478-490`, `modules/ai/cli.py:342-349`. No command lets a flag skip it any more — `config reset`
-joined the gate (`commands/config_cmd.py:132-137`, AC-10) — and no test drives an interactive prompt, so the typed words themselves
+same gate before its `shutil.rmtree` (`create_module_cmd.py:49-54`); anything else exits 6. Check: `approve.py:50-58`,
+`modules/files/cli.py:340-353,478-490`, `modules/ai/cli.py:341-348`. No command lets a flag skip it any more — `config reset`
+joined the gate (`commands/config_cmd.py:131-136`, AC-10) — and no test drives an interactive prompt, so the typed words themselves
 hold by reading and by the refusal path, not by a human typing `DELETE` on this machine.
 
 **AC-27 — the file wall.** Given `--root DIR`, when `files` resolves, copies, moves, renames or deletes, then a path outside the wall is
@@ -249,11 +251,11 @@ exploitation or packet-capture capability. Check: `tests/modules/test_hacker.py`
 
 **AC-31 — honest unknowns.** Given a metric the platform cannot read, output says "unsupported here - no sensors exposed through psutil",
 "unsupported - psutil exposes no GPU API", "not reported by this platform" or "unknown" rather than a zero; a failed update check is reported
-as a network limitation; an unknown theme is announced. Check: `modules/systempulse/cli.py:95,105-106,127`, `dashboard/theme.py:95-103`,
+as a network limitation; an unknown theme is announced. Check: `modules/systempulse/cli.py:94,104-105,126`, `dashboard/theme.py:95-103`,
 `tests/modules/test_tube.py` `test_an_unknown_total_is_said_as_unknown_rather_than_zero`. `levix doctor` is tested by `tests/test_doctor.py`
 (six cases: the full report carries all three areas, `--only modules` hides capabilities and env, `--only capabilities` hides modules,
 `--only env` is the environment slice, an unknown area is a `ConfigError`, and a filtered report states its own verdict); the `prefix`
-filter is applied at `commands/doctor_cmd.py:43-54`.
+filter is applied at `commands/doctor_cmd.py:42-53`.
 
 ## Criteria that cannot be accepted on this machine yet
 
@@ -261,7 +263,7 @@ filter is applied at `commands/doctor_cmd.py:43-54`.
 | --- | --- | --- |
 | POSIX-only paths | the mode of the secrets file on Linux/macOS and the keyring branch of `secrets.py:81-104`; the `ip addr show`, `ifconfig`, `resolv.conf`, `nsswitch.conf`, `route -n` parsers in `hacker`; `brew install ffmpeg` / `sudo apt install ffmpeg` advice | `tests/test_secrets.py` now stats `secrets.json` - owner-only after a real write, still owner-only with the `chmod` refused, and back to `0600` over a store that existed at `0644` - and CI runs #6 and #8 executed those three cases on the Ubuntu and macOS columns instead of skipping them, so the POSIX mode is now observed on a POSIX filesystem; the keyring branch is still not, because no runner has a keyring this project may touch. On Windows the same file reads the real `icacls` output and accepts only an ACL with one grant, to this user, and nothing inherited. `tests/modules/test_ai.py::test_key_from_the_owner_only_file_when_no_keyring` and `tests/modules/test_hacker.py::test_ip_addr_show_lists_interfaces_addresses_and_flags` drive those paths with fakes or captured text, never a real tool's output, and `modules/tube/core.py:40-51` picks advice by `sys.platform` |
 | Real TTY behaviour | playing Snake or Tetris by key, `files browse`, `monitor live`, animated `hacker matrix`, the dashboard on a screen | AC-15 forces refusal or bounding when stdout is a pipe; screens are driven headlessly by Textual's Pilot (`tests/test_dashboard.py`, `tests/modules/test_files.py::test_browse_screen_copies_previews_and_deletes`, `tests/modules/test_arcade.py::test_the_snake_screen_steers_on_a_key_redraws_and_settles`, the last two `integration`) |
-| Typed destructive words | a human typing `DELETE`, `OVERWRITE` or `RUN` at a real prompt | AC-25/AC-26 are asserted only through the non-TTY refusal; `approve.py:51-59` has no interactive test |
+| Typed destructive words | a human typing `DELETE`, `OVERWRITE` or `RUN` at a real prompt | AC-25/AC-26 are asserted only through the non-TTY refusal; `approve.py:50-58` has no interactive test |
 | Audible playback and a real download | sound actually reaching a device; a merged-stream download and a `--convert-to` that really ran | `tests/modules/test_music.py::test_zero_five_seconds_of_a_real_tone_reaches_a_real_output_device` is `integration` and device-dependent; the tube tests drive the ffmpeg verdict through `core.ffmpeg_path()` patched in a test (`tests/modules/test_tube.py::test_a_conversion_works_when_ffmpeg_is_present`), and no download was ever performed for real because the build makes no network requests. The `music` fetch path *was* run end to end against a closed port - `levix music play http://127.0.0.1:1/tone` on a machine with yt-dlp 2026.10.26 and ffmpeg on `PATH` took ~3.8 s, printed one message and exited 8 - which pins the failure mapping and the one-report rule and says nothing about any site (`docs/modules/MUSIC.md` gap 8). Note the machine state: `ffmpeg`, `ffprobe` and `ffplay` ARE on PATH here (a winget `yt-dlp.FFmpeg` build), so `capabilities.probe("ffmpeg")` and `probe("media_player")` both report `ok` and the exit-7 refusal is not reachable on this host without patching |
 | Network providers | live Tube downloads, `levix ai` against a real server, `levix update` against PyPI | the suite substitutes Tube's `_make_ydl` seam and the AI transport, and `tests/test_update.py` now drives `levix update` and `update --json` against a replaced `urlopen` - which pins the parsing, the comparison, the exit codes and the request shape without opening a socket. What no test answers is what `https://pypi.org/pypi/levix/json` really returns for a name that is not published |
 | Distribution | `pipx install levix`, wheels, standalone binaries | `README.md:13-23` advertises them and nothing is published: `https://pypi.org/pypi/levix/json` answers 404 and `levix update` exits 8 naming it. The wheels build (`python -m build`, 66 entries, `levix/py.typed` in) and `.github/workflows/release.yml` would publish them, but the PyPI project and its trusted publisher do not exist yet. The only accepted install remains `pip install -e ".[dev,all]"` from this tree |

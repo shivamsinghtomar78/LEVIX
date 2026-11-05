@@ -260,7 +260,8 @@ sink on all three documented methods, the cache folder derived from `sha256(url)
 nothing a server chose names anything on this disk, a second link getting its own
 folder, a replay that never builds a second yt-dlp, the wait notice appearing only in
 front of a download that is really about to happen, a refused scheme resolved before
-either tool or the cache is looked at, a reported path outside the URL's own folder
+either tool or the cache is looked at and quoted back in the refusal with its colons
+intact (the console that prints it is `terminal.new_console`), a reported path outside the URL's own folder
 refused and never decoded (exit 7), a fetch that reports no path (exit 8), yt-dlp
 raising into one mapped message quoting its own reason (exit 8), a file already on
 disk over the byte cap refused before decode (exit 7, exact bytes named, and no

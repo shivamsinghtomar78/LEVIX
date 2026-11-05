@@ -177,6 +177,14 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   reason instead of advertising a third option. Removing a field from a dataclass that
   `levix.sdk` re-exports is only safe because nothing has been published yet; after the first
   release this is a breaking change and has to be handled as one.
+- `terminal.new_console()` (`src/levix/terminal.py:160-176`) is now the only way LEVIX builds a
+  Rich console: 18 construction sites in the core, the platform commands, the seven module CLIs
+  and the error paths stopped calling `Console()` directly so `emoji=False` is set by
+  construction instead of by memory. The factory keeps `stderr` and `highlight` as arguments
+  because those three call sites genuinely differ - diagnostics go to stderr, and the help and
+  error renderers turn highlighting off - and adds nothing else. Textual is untouched: the
+  dashboard's `Content.from_markup` does not substitute shortcodes, which is why the defect was
+  invisible there.
 
 ### Fixed
 
@@ -338,6 +346,22 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   which discovers a `hidden` manifest through the real loader and then asks the registry for it
   by name - `hidden` is a display rule, and a display rule must not be able to take a
   subcommand away.
+- A colon in text LEVIX quotes back was eaten, and an emoji was pasted into its place. `markup_safe`
+  closes Rich's *first* parser over a printed `str` - `[...]` as a style tag - but Rich then runs a
+  second one, `:name:` as an emoji shortcode, and no escaping of the string closes it because there
+  is no way to write a colon that means itself. `abc` is a live shortcode (U+1F524), so
+  `levix music play magnet:abc` printed the link it was refusing as `magnet` + 🔤 +
+  ` only http and https are played from a URL`: the sentence lost the colon after the scheme, the
+  colon before the closing quote and the word `link`'s separator in between. The console is built
+  with `emoji=False` instead (`terminal.new_console`, above), which leaves the markup parser alone -
+  a LEVIX-authored `[bold red]error:[/bold red]` still renders - while the text being quoted is
+  carried as typed. Pinned by `tests/test_markup_safety.py::test_an_emoji_shortcode_reaches_the_screen_as_colons`,
+  `::test_the_console_that_refuses_emoji_still_renders_the_markup_levix_authors` and
+  `::test_a_refused_link_is_quoted_back_as_it_was_typed`, the last of which drives the real router
+  and asserts on the refusal a user would read. The shipped example plugin
+  (`plugin-examples/hello/src/levix_hello/cli.py`) and the `levix create-module` scaffold
+  (`commands/create_module_cmd.py`) print `markup=False, emoji=False`, because those two are what a
+  plugin author copies rather than runs.
 
 ### Verification
 
@@ -349,13 +373,14 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   `[tool.mypy].files` declares and what CI now runs - and `--platform win32`, `--platform linux`
   and `--platform darwin` each report the same 62 clean, re-run against this tree because
   `create_module_cmd._template`, `secrets._write_file`, `module.UiSpec`, `registry`,
-  `dashboard/module_list` and now `music/core.py` and `music/cli.py` are all in it.
+  `dashboard/module_list`, `music/core.py`, `music/cli.py` and now `terminal.new_console` with the
+  18 call sites that go through it are all in it.
 - The suite, on this machine: `.venv/Scripts/python.exe -m pytest -o addopts="" -q` runs
-  **664 test functions in 21 files, collecting 829 parametrised cases** and reports
-  **821 passed, 8 skipped, 2 warnings in 123.32 s**, exit 0. The same tree without the ten
+  **667 test functions in 21 files, collecting 832 parametrised cases** and reports
+  **824 passed, 8 skipped, 2 warnings in 110.06 s**, exit 0. The same tree without the ten
   `integration` cases - which is what every CI column runs - is
-  **811 passed, 8 skipped, 10 deselected in 100.90 s**, and those ten alone are
-  **10 passed, 819 deselected, 2 warnings in 10.85 s**. Eight skips, and each names its reason:
+  **814 passed, 8 skipped, 10 deselected in 103.92 s**, and those ten alone are
+  **10 passed, 822 deselected, 2 warnings in 10.73 s**. Eight skips, and each names its reason:
   five symlink cases in `tests/modules/test_files.py` (this account cannot create symlinks; three
   more state that POSIX symlinks need no privilege there) and the three POSIX-only permission
   cases in `tests/test_secrets.py`, which CI run #6 executed on the Ubuntu and macOS columns

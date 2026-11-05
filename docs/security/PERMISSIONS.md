@@ -5,7 +5,7 @@ LEVIX are disclosure, not enforcement.** A module's declaration is printed for a
 read; it never grants, never refuses, and never changes what a module's code can do.
 
 The engine says so itself, in the one place that prints the set for a third-party module
-(`commands/plugins_cmd.py:88-95`):
+(`commands/plugins_cmd.py:87-94`):
 
 > note: declared permissions are a promise by the author, not an enforced limit. Python
 > plugins can do anything LEVIX can.
@@ -43,9 +43,9 @@ The complete list of reads in the engine:
 
 | Site | Behaviour |
 |------|-----------|
-| `commands/plugins_cmd.py:88-95` | `levix plugins info NAME` prints `permissions: <sorted values>` when the set is non-empty, and appends the disclosure warning when `origin is THIRD_PARTY` |
+| `commands/plugins_cmd.py:87-94` | `levix plugins info NAME` prints `permissions: <sorted values>` when the set is non-empty, and appends the disclosure warning when `origin is THIRD_PARTY` |
 | `dashboard/app.py:284-286` | the detail panel appends `permissions <values>` when the set is non-empty |
-| `commands/create_module_cmd.py:119` | the scaffolded manifest declares `{Permission.FS_READ}` |
+| `commands/create_module_cmd.py:118` | the scaffolded manifest declares `{Permission.FS_READ}` |
 | `tests/test_registry.py` | asserts the closed set and the `frozenset` type |
 
 Nothing in `router.py`, `registry.py`, `deps.py`, `approve.py`, `secrets.py`, `spawn.py`,
@@ -145,7 +145,7 @@ Those are controls. `permissions` is a caption next to them.
    `permissions: none declared`. A user comparing `files` and `game` sees more disclosure
    for the module that asks for confirmation before deleting.
 3. **`levix plugins list` shows no permissions column** — name, origin, version, commands
-   and state only (`plugins_cmd.py:33-51`) — so the one command a user runs to survey what
+   and state only (`plugins_cmd.py:32-50`) — so the one command a user runs to survey what
    is installed is the one that never mentions capabilities. `info` requires knowing a name
    first.
 4. **A plugin can under-declare with no consequence**, and there is no mechanical check
@@ -161,5 +161,5 @@ Those are controls. `permissions` is a caption next to them.
    which any plugin can do with `os.environ` — the exact route `secrets.get_secret` itself
    uses.
 7. **The scaffolded template declares `FS_READ` for a `hello` command that reads nothing**
-   (`create_module_cmd.py:119`), so the first declaration a new author sees is inaccurate.
+   (`create_module_cmd.py:118`), so the first declaration a new author sees is inaccurate.
    A generated `{}` with a comment listing the seven members would teach the right habit.

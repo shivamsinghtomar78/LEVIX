@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import typer
-from rich.console import Console
 from rich.live import Live
 from rich.markup import escape
 from rich.table import Table
@@ -26,7 +25,7 @@ from ...deps import gate
 from ...errors import ConfigError, ExternalToolError, ProviderError
 from . import MANIFEST, core
 
-console = Console()
+console = terminal.new_console()
 
 PLAYLIST_WARNING = (
     "[yellow]--playlist:[/yellow] one playlist is many requests - the listing plus a "

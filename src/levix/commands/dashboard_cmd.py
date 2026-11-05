@@ -10,12 +10,12 @@ from __future__ import annotations
 import sys
 
 import typer
-from rich.console import Console
 
 from ..context import LevixContext
 from ..errors import EXIT_USAGE, ConfigError
+from ..terminal import new_console
 
-console = Console()
+console = new_console()
 
 
 def dashboard_command(typer_ctx: typer.Context) -> None:

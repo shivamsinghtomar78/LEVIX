@@ -35,7 +35,7 @@ what is enforced.
 | --- | --- | --- | --- |
 | NFR-3.1 | No output may assume the console can encode Unicode. Writing `U+2588` through Rich's win32 writer raises `UnicodeEncodeError`, so glyph sets come from `terminal.active_glyphs()` (cached, `lru_cache(maxsize=1)`). | `src/levix/terminal.py` (`glyphs`, `active_glyphs`, `bar`) | `tests/test_terminal.py` (19 tests) |
 | NFR-3.2 | Text that arrives from outside the terminal (site titles, file names, model replies) is folded onto one printable line, with unencodable characters as `\uXXXX` and control characters as `\xNN`, before it reaches the console. | `terminal.encode_safe`, `main._plain`, `modules/tube/cli.py::_show`, `modules/files/cli.py::show`, `modules/files/core.py::printable` | `tests/modules/test_files.py::test_printable_survives_a_name_the_console_cannot_encode` |
-| NFR-3.3 | Markup inside dynamic values must not be interpreted: everything user-supplied is `rich.markup.escape`d on the way out. | `main._plain`, `_show`, `show`, `dashboard/app.py` `markup=False` notifications | `tests/modules/test_files.py::test_printable_keeps_what_the_console_can_encode` |
+| NFR-3.3 | Markup inside dynamic values must not be interpreted: everything user-supplied is `rich.markup.escape`d on the way out, and Rich's second `str` parser — the one that turns `:abc:` into an emoji — is switched off on the console rather than escaped, because no escape closes it. | `main._plain`, `_show`, `show`, `terminal.new_console` (`emoji=False`) at every console in `src/levix`, `dashboard/app.py` `markup=False` notifications | `tests/modules/test_files.py::test_printable_keeps_what_the_console_can_encode`, `tests/test_markup_safety.py::test_an_emoji_shortcode_reaches_the_screen_as_colons` |
 | NFR-3.4 | On Windows, ANSI escape sequences are emitted only after `ENABLE_VIRTUAL_TERMINAL_PROCESSING` (0x0004) has been confirmed; a failure degrades to plain text and never raises. | `terminal._windows_vt_enabled` (ctypes `GetStdHandle`/`GetConsoleMode`/`SetConsoleMode`) | `tests/test_terminal.py` |
 | NFR-3.5 | Colour obeys `NO_COLOR`, `LEVIX_NO_COLOR=1`, `TERM=dumb` and a non-TTY stdout. | `terminal.detect` | `tests/test_terminal.py`, `tests/conftest.py` |
 | NFR-3.6 | Python 3.12+ only, Windows, Linux and macOS paths resolved through platformdirs; `LEVIX_HOME` moves all five directories at once, and `LEVIX_{CONFIG,DATA,CACHE,STATE,LOG}_DIR` override one each. | `src/levix/paths.py` | `tests/test_config.py`, `tests/conftest.py` |
@@ -82,7 +82,7 @@ what is enforced.
 
 | ID | Requirement | Delivered by | Verified by |
 | --- | --- | --- | --- |
-| NFR-7.1 | A metric that cannot be read is reported as unknown, never as zero. The words used are "not reported", "not reported by this platform", "unsupported". | `modules/systempulse/cli.py:85,96,98,119`, `capabilities.py` docstring (`UNSUPPORTED` is a real answer), `modules/tube/cli.py` size/uploader rows | `tests/modules/test_tube.py::test_summary_reports_a_field_the_site_did_not_provide_as_unknown`, `::test_an_unknown_total_is_said_as_unknown_rather_than_zero` |
+| NFR-7.1 | A metric that cannot be read is reported as unknown, never as zero. The words used are "not reported", "not reported by this platform", "unsupported". | `modules/systempulse/cli.py:84,95,97,118`, `capabilities.py` docstring (`UNSUPPORTED` is a real answer), `modules/tube/cli.py` size/uploader rows | `tests/modules/test_tube.py::test_summary_reports_a_field_the_site_did_not_provide_as_unknown`, `::test_an_unknown_total_is_said_as_unknown_rather_than_zero` |
 | NFR-7.2 | An unavailable capability with an installed package is distinguished from a missing package: probes differ from `deps`. | `capabilities.py` vs `deps.py` | observed: `gpu` row prints "unsupported - psutil exposes no GPU API" while psutil 7.2.2 is installed |
 | NFR-7.3 | An install hint is omitted rather than guessed when it would not name a real package. | `module.resolved_install_hint`, `deps.ensure_dependencies` ("no install hint is declared for this module") | `tests/test_registry.py::test_a_module_that_names_no_provider_gets_no_invented_pip_line` |
 | NFR-7.4 | Version comparison that cannot be parsed yields `uncertain`, which is surfaced, not treated as satisfied silently. | `deps.Availability.UNCERTAIN`, `describe` | `tests/test_deps.py` |
@@ -127,7 +127,7 @@ what is enforced.
 | ID | Requirement | Delivered by | Evidence |
 | --- | --- | --- | --- |
 | NFR-11.1 | No test touches a real user profile: the `levix_home` fixture deletes every `LEVIX_*` variable, sets `LEVIX_HOME`, disables file logging and forces `NO_COLOR=1`. | `tests/conftest.py` | file logging is disabled because an open handle makes Windows fail to delete the temp directory |
-| NFR-11.2 | Tests run the real entry point so exit codes and history are exercised, not just command bodies. | `tests/conftest.py::run_cli` → `levix.main.main(list(argv))` | the whole suite (821 passed, 8 skipped here; five skips are symlink cases, three are the POSIX-only file-mode cases in `tests/test_secrets.py`, which ran on the Ubuntu and macOS columns of CI runs #6 and #8) |
+| NFR-11.2 | Tests run the real entry point so exit codes and history are exercised, not just command bodies. | `tests/conftest.py::run_cli` → `levix.main.main(list(argv))` | the whole suite (824 passed, 8 skipped here; five skips are symlink cases, three are the POSIX-only file-mode cases in `tests/test_secrets.py`, which ran on the Ubuntu and macOS columns of CI runs #6, #8 and #9) |
 | NFR-11.3 | The registry is injectable, and reset before and after every test. | `registry.use`, `conftest._reset_registry` (autouse) | `tests/test_registry.py::test_active_registry_is_injectable_and_resettable` |
 | NFR-11.4 | The dashboard is tested headless with Textual's Pilot (`run_test(headless=True, size=(100, 30))`) because the suite runs where there is no terminal. | `tests/test_dashboard.py` header, `app.run_test` | 19 dashboard tests |
 | NFR-11.5 | Markers `integration` and `slow` are declared and `--strict-markers` is on; 10 tests are marked `integration`. | `pyproject.toml` `[tool.pytest.ini_options]` | no test uses `slow`. Three of the ten ask the machine which sound devices it has, which is what CI's headless runners cannot answer |
@@ -172,7 +172,7 @@ what is enforced.
   rows - is asserted rather than shown by hand.
 - **Doctor filtering was inert.** `--only modules` / `--only capabilities` computed a
   `prefix` in `commands/doctor_cmd.py` and never applied it, so every area printed. The
-  filter is applied at `doctor_cmd.py:43-54` and `tests/test_doctor.py` (6 cases) asserts
+  filter is applied at `doctor_cmd.py:42-53` and `tests/test_doctor.py` (6 cases) asserts
   each area's row prefixes and that `--json` verdicts come from the rows actually shown.
 - **Lint and typing were dirty.** `ruff check src tests`, `ruff format --check src tests`
   and `mypy src/levix` now all exit 0 on Windows with the `.venv` in this repo (the numbers

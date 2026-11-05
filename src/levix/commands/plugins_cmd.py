@@ -11,7 +11,6 @@ docs/architecture/PLUGIN_ARCHITECTURE.md and docs/roadmap/CURRENT_STATUS.md.
 from __future__ import annotations
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from ..context import LevixContext
@@ -19,9 +18,9 @@ from ..deps import resolve
 from ..errors import ConfigError
 from ..module import PackageRef
 from ..registry import active, is_broken
-from ..terminal import markup_safe
+from ..terminal import markup_safe, new_console
 
-console = Console()
+console = new_console()
 plugins_app = typer.Typer(help="Inspect installed modules and plugins.", no_args_is_help=True)
 
 

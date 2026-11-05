@@ -13,13 +13,13 @@ import urllib.error
 import urllib.request
 
 import typer
-from rich.console import Console
 
 from .. import __version__
 from ..deps import _version_tuple
 from ..errors import ProviderError
+from ..terminal import new_console
 
-console = Console()
+console = new_console()
 INDEX_URL = "https://pypi.org/pypi/levix/json"
 
 

@@ -131,7 +131,7 @@ for a command the root had just advertised. The alias and the group disagreed ab
 Verified by `tests/test_router.py:172-202` (`levix nt via-alias`, the alias's own help
 page, and the root listing) and `tests/test_plugin_example.py::test_a_plugin_alias_is_registered_the_same_way`.
 
-Inside the module, `ai/cli.py:101-102` registers the same aliases on its own Typer as
+Inside the module, `ai/cli.py:100-101` registers the same aliases on its own Typer as
 hidden commands, so `levix ai q "hi"` works too and the module's help page does not show
 the duplicate.
 
@@ -146,7 +146,7 @@ for command in MANIFEST.commands:
     application.command(command.name, help=command.help)(surface[command.name])
 ```
 
-`tube/cli.py:55-71`, `ai/cli.py:72-103`. Typer's `command()` has no alias parameter, so
+`tube/cli.py:54-70`, `ai/cli.py:71-102`. Typer's `command()` has no alias parameter, so
 AI registers a shorthand twice (`application.command(alias, help=info.help, hidden=True)`).
 
 | Typer setting | Value | Why |
@@ -172,7 +172,7 @@ Two consequences that are visible in the code rather than asserted:
   hints are the single source of truth for arguments. Duplicating them here creates a
   second contract that drifts from the first."
 * Options that mean the same thing on several commands are shared `typer.Option` objects,
-  as in `ai/cli.py:42-49`, so one help string covers five commands.
+  as in `ai/cli.py:41-48`, so one help string covers five commands.
 
 ## Reading configuration from a command
 
@@ -180,9 +180,9 @@ Four shapes appear, all of them reading the forwarded `LevixContext`:
 
 | Shape | Used by | Code |
 |-------|---------|------|
-| `_configured(ctx, dotted, fallback)` | tube, hacker | `tube/cli.py:348`, `hacker/cli.py:283` — read `obj.value(dotted)`, fall back when there is no `obj` at all or when the read raises `ConfigError`/`TypeError`/`ValueError` |
-| `_obj` / `_ctx` / `_context` with a `build_context()` fallback | music, arcade, ai, dashboard, plugins, config | `music/cli.py:85`, `arcade/cli.py:69`, `ai/cli.py:111` |
-| direct `obj.value(...)` with an `is not None` guard | monitor | `systempulse/cli.py:284,289` — `if obj is not None else 15` / `else 1.0` |
+| `_configured(ctx, dotted, fallback)` | tube, hacker | `tube/cli.py:347`, `hacker/cli.py:283` — read `obj.value(dotted)`, fall back when there is no `obj` at all or when the read raises `ConfigError`/`TypeError`/`ValueError` |
+| `_obj` / `_ctx` / `_context` with a `build_context()` fallback | music, arcade, ai, dashboard, plugins, config | `music/cli.py:85`, `arcade/cli.py:69`, `ai/cli.py:110` |
+| direct `obj.value(...)` with an `is not None` guard | monitor | `systempulse/cli.py:283,288` — `if obj is not None else 15` / `else 1.0` |
 | `self._value(dotted, fallback)` | dashboard | `dashboard/app.py:243-246` |
 
 The fallbacks exist for tests that build a module's Typer directly. Because the router
@@ -222,7 +222,7 @@ only place that maps an exception to a code. See `ERROR_HANDLING.md` for the tab
   intended behaviour (`router.py:90-93`), just worth knowing when reading a bug report.
 * **`UnknownModuleError` (exit 4) is defined but never raised.** The only producers of
   exit 4 in the tree are `main._classify` pattern-matching click's message, plus
-  `plugins info` raising `typer.Exit(code=4)` directly (`plugins_cmd.py:71-73`). The class
+  `plugins info` raising `typer.Exit(code=4)` directly (`plugins_cmd.py:70-72`). The class
   exists for the contract, not for current use.
 
 ### Closed since the first draft of this page
@@ -233,7 +233,7 @@ only place that maps an exception to a code. See `ERROR_HANDLING.md` for the tab
   subcommand and `_forward` prefixes it, so `levix q "hi"` is `levix ai ask "hi"` and
   `levix q -h` is `ask`'s own help page. See "How a manifest alias reaches its command".
 * **The three module comments that contradicted the forwarding code are corrected.**
-  `arcade/cli.py:69-79`, `music/cli.py:80-89` and `ai/cli.py:111-120` claimed
+  `arcade/cli.py:69-79`, `music/cli.py:80-89` and `ai/cli.py:110-119` claimed
   `ctx.obj` is None for a forwarded module command. It is not: `router._forward` passes
   `obj=ctx.obj`, and the `build_context()` branches are now documented as the
   direct-app-invocation fallback they actually are.

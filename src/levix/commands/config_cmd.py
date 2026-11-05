@@ -7,7 +7,6 @@ import subprocess
 import sys
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from ..config import (
@@ -17,10 +16,10 @@ from ..config import (
 )
 from ..context import LevixContext
 from ..errors import ConfigError
-from ..terminal import markup_safe
+from ..terminal import markup_safe, new_console
 
 config_app = typer.Typer(help="Read and write LEVIX configuration.", no_args_is_help=True)
-console = Console()
+console = new_console()
 
 #: Markup-free on purpose: this lands in a Rich table cell, where `[set, hidden]` is a
 #: style tag and renders as nothing at all - the value column looks empty instead of

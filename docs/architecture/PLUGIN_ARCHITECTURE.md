@@ -77,7 +77,7 @@ read are two display functions:
 
 | Surface | What it prints |
 |---------|----------------|
-| `levix plugins info NAME` | `permissions: audio, fs_read, network, subprocess` and, for a `THIRD_PARTY` module that declares any, the sentence "note: declared permissions are a promise by the author, not an enforced limit. Python plugins can do anything LEVIX can." (`plugins_cmd.py:88-95`) |
+| `levix plugins info NAME` | `permissions: audio, fs_read, network, subprocess` and, for a `THIRD_PARTY` module that declares any, the sentence "note: declared permissions are a promise by the author, not an enforced limit. Python plugins can do anything LEVIX can." (`plugins_cmd.py:87-94`) |
 | dashboard `_describe` | `permissions <values>` when the set is non-empty (`dashboard/app.py:284-286`) |
 
 Full analysis, per-module table and the honest limits: `../security/PERMISSIONS.md`.
@@ -92,7 +92,7 @@ fiction" (`create_module_cmd.py:5`).
 |------|---------|
 | `pyproject.toml` | hatchling `>=1.33`, `name = "levix-<name>"`, `version = "0.1.0"`, `requires-python = ">=3.12"`, `license = "MIT"`, `dependencies = ["levix>=0.4"]`, `[project.entry-points."levix.plugins"] <name> = "levix_<name>:MANIFEST"`, `dev = ["pytest>=9", "ruff>=0.17"]`, wheel `packages = ["src/levix_<name>"]` |
 | `src/levix_<name>/__init__.py` | `MANIFEST` with one `CommandInfo(name="hello", …)`, `cli_path="levix_<name>.cli:build_app"`, `version="0.1.0"`, `requirements=()`, `permissions=frozenset({Permission.FS_READ})`, `documentation="README.md"`, plus a `build_app()` that imports `levix_<name>.cli` inside its body |
-| `src/levix_<name>/cli.py` | `typer.Typer(name, help=MANIFEST.summary, no_args_is_help=True)` with a `hello` command that prints `MANIFEST.title` plus the argument with `markup=False`, because the argument is the caller's text and Rich would read a `[/bold]` in it as a style tag |
+| `src/levix_<name>/cli.py` | `typer.Typer(name, help=MANIFEST.summary, no_args_is_help=True)` with a `hello` command that prints `MANIFEST.title` plus the argument with `markup=False, emoji=False`, because the argument is the caller's text and Rich reads a `[/bold]` in it as a style tag and a `:abc:` as an emoji |
 | `README.md` | development install steps and the rule "Heavy imports belong inside command functions, never at module scope." The usage it shows is `levix <name> [who]`: Typer mounts a **one-command** app as the command itself, so `levix <name> hello` is an extra-argument error even though `hello` is the function's name |
 | `tests/test_manifest.py` | asserts `MANIFEST.name`, that `cli_path.endswith(":build_app")`, `command_names() == ("hello",)`, and that `build_app().info.name` matches (`Typer` has no `_name`) |
 
@@ -112,7 +112,7 @@ Rules and guards:
 | non-empty target without `--force` | `ConfigError`, "Refusing to overwrite" |
 | non-empty target with `--force` | `require_approval(…, destructive=True)` — a typed `DELETE`, `--yes` cannot substitute — then `shutil.rmtree` |
 | package name | `"levix_" + name.replace("-", "_")` |
-| closing message | "Third-party plugins run with LEVIX's full privileges. See docs/security/PERMISSIONS.md and docs/architecture/PLUGIN_ARCHITECTURE.md." (`create_module_cmd.py:74-75`) |
+| closing message | "Third-party plugins run with LEVIX's full privileges. See docs/security/PERMISSIONS.md and docs/architecture/PLUGIN_ARCHITECTURE.md." (`create_module_cmd.py:73-74`) |
 
 ## Installation and removal are not implemented
 
@@ -136,7 +136,7 @@ environment as LEVIX, which is the only supported route, and `levix doctor` and
 ## Known gaps
 
 1. **The gate is not part of the template.** Every official module registers a Typer
-   `callback=_gate` calling `deps.gate(MANIFEST)` (`tube/cli.py:49-52` is the shortest);
+   `callback=_gate` calling `deps.gate(MANIFEST)` (`tube/cli.py:48-51` is the shortest);
    the generated `cli.py` has neither, and its manifest declares `requirements=()`. A
    plugin that later adds a requirement gets no exit-3 message and instead raises
    `ImportError` at `build_cli` time — exit 1 with a traceback. `plugin-examples/hello`
@@ -199,7 +199,7 @@ environment as LEVIX, which is the only supported route, and `levix doctor` and
   present.
 - **The documents those commands point at exist.** `create-module`'s closing message names
   `docs/security/PERMISSIONS.md` and `docs/architecture/PLUGIN_ARCHITECTURE.md`
-  (`create_module_cmd.py:74-75`), and `commands/plugins_cmd.py:1-8` names this page plus
+  (`create_module_cmd.py:73-74`), and `commands/plugins_cmd.py:1-8` names this page plus
   `docs/roadmap/CURRENT_STATUS.md`. There is no `docs/plugins/` directory and nothing
   references it.
 - **The scaffold is now executed, not just emitted.** Its docstring

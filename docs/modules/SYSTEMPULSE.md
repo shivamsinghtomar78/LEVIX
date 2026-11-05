@@ -201,7 +201,7 @@ renders each core with `width=28`, `overview` uses the default 20 and the disk c
 
 Every cell this module did not author goes through `levix.terminal.markup_safe()` before it
 reaches `Table.add_row`: `row.name`, `row.username` and `row.status` in the process table
-(`src/levix/modules/systempulse/cli.py:278-283`), `row.mountpoint`, `row.device` and
+(`src/levix/modules/systempulse/cli.py:277-282`), `row.mountpoint`, `row.device` and
 `row.fstype` in the disk table (`cli.py:248-250`), the interface name in the network table
 (`cli.py:194`) and the `temp [k10temp]` label in `overview` (`cli.py:104`). That matches
 what `files` does with `show()` and what `hacker` and `music` do with their own `_show()`.

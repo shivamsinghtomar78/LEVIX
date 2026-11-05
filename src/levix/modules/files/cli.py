@@ -20,17 +20,17 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from rich.console import Console
 from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+from ... import terminal
 from ...approve import require_approval
 from ...deps import gate
 from ...errors import EXIT_INTERRUPTED
 from . import MANIFEST, core
 
-console = Console()
+console = terminal.new_console()
 
 app = typer.Typer()
 

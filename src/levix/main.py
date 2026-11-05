@@ -125,15 +125,14 @@ def _plain(value: object) -> str:
 
 
 def _show_alternatives(name: str) -> None:
-    from rich.console import Console
-
     from . import registry as registry_module
+    from .terminal import new_console
 
     try:
         names = sorted(m.name for m in registry_module.active().manifests())
     except Exception:
         return
-    console = Console(stderr=True, highlight=False)
+    console = new_console(stderr=True, highlight=False)
     console.print(f"[bold red]unknown command:[/bold red] {_plain(name)}")
     console.print("available: " + ", ".join(f"[cyan]{_plain(n)}[/cyan]" for n in names))
     console.print("[dim]`levix -h` lists every command and option.[/dim]")
@@ -149,7 +148,7 @@ def _show_click(exc: BaseException) -> None:
 def _report_unexpected(exc: BaseException, args: list[str]) -> int:
     import traceback
 
-    from rich.console import Console
+    from .terminal import new_console
 
     # Logging is a courtesy here. If the logger itself raises, the user still has to get
     # the report on stderr, which is the only reason this function exists.
@@ -162,7 +161,7 @@ def _report_unexpected(exc: BaseException, args: list[str]) -> int:
             exc_info=True,
         )
 
-    console = Console(stderr=True, highlight=False)
+    console = new_console(stderr=True, highlight=False)
     console.print(
         f"[bold red]unexpected error:[/bold red] {_plain(type(exc).__name__)}: {_plain(exc)}"
     )
@@ -175,9 +174,9 @@ def _report_unexpected(exc: BaseException, args: list[str]) -> int:
 
 
 def _render_error(exc: LevixError) -> None:
-    from rich.console import Console
+    from .terminal import new_console
 
-    console = Console(stderr=True, highlight=False)
+    console = new_console(stderr=True, highlight=False)
     console.print(f"[bold red]error:[/bold red] {_plain(exc.message)}")
     if exc.hint and exc.hint not in exc.message:
         console.print(f"[dim]hint:[/dim] {_plain(exc.hint)}")

@@ -12,6 +12,10 @@ import shutil
 import sys
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,3 +155,22 @@ def markup_safe(value: object) -> str:
     from rich.markup import escape
 
     return escape(str(value))
+
+
+def new_console(*, stderr: bool = False, highlight: bool = True) -> Console:
+    """The Rich console every LEVIX command prints through, minus the str rewrites.
+
+    `emoji=False` is why this is a function and not a bare `Console()` at each site. Rich
+    runs two parsers over a `str` handed to `print`: markup for `[...]`, which
+    `markup_safe` closes, and emoji shortcodes for `:name:`, which no escaping of the
+    string closes - there is no way to write a colon that means itself. Command-line text
+    is exactly the text that carries colons, so before this existed `levix music play
+    magnet:abc` reported the link it refused as `magnet` + U+1F524 + ` only http and
+    https are played from a URL`: the error named a thing with a colon eaten and an emoji
+    pasted in, and the punctuation that separated it from the sentence went with it.
+    LEVIX authors no emoji shortcodes anywhere, so the only code path that could need one
+    is the path quoting something it did not write.
+    """
+    from rich.console import Console
+
+    return Console(stderr=stderr, highlight=highlight, emoji=False)

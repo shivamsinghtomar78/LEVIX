@@ -141,7 +141,7 @@ word, so that no habit, flag or pipe can silently wipe a tree.
   [--recursive]` measures and prints the plan, then requires the typed word `DELETE`
   (`cli.py:459-490`). Symlinks go as links, never as their targets; escaping the wall is
   `UnsafePathError`, exit 2. `--yes` cannot authorise any of it ("--yes cannot authorize a
-  destructive action"), and a non-TTY stdin is a refusal, exit 6 (`approve.py:34-49`).
+  destructive action"), and a non-TTY stdin is a refusal, exit 6 (`approve.py:33-48`).
 - Verified by: `tests/modules/test_files.py::test_delete_yes_cannot_authorize_a_deletion`,
   `::test_delete_refuses_without_a_terminal_and_removes_nothing`, `::test_copy_with_force_still_needs_a_terminal`,
   `::test_delete_above_the_named_root_is_refused`, `::test_resolve_refuses_a_traversal_out_of_the_root`.
@@ -158,7 +158,7 @@ it stays predictable and inside site terms.
 
 - Satisfied today: `tube info URL [--formats] [--playlist] [--allow-file-url]`,
   `download URL [--output DIR] [--format best|video|audio|SELECTOR] [--convert-to mp3|...]
-  [--playlist] [--allow-file-url]`, `play URL [--player mpv]` (`modules/tube/cli.py:79-321`).
+  [--playlist] [--allow-file-url]`, `play URL [--player mpv]` (`modules/tube/cli.py:78-320`).
   Without ffmpeg, `best`/`video`/`audio` resolve to single-file selectors and say so; a merged
   selector or any `--convert-to` exits 7 with this platform's install command — `winget install
   Gyan.FFmpeg` on Windows (`modules/tube/core.py:40-51`). `play` resolves a single-file stream URL,
@@ -220,7 +220,7 @@ to say so, so that I never act on a fabricated number.
 
 - Satisfied today: `monitor overview [--limit N]`, `cpu`, `memory`, `disk`,
   `network [--watch SECONDS]`, `processes [--limit/-n N] [--by cpu|memory]`,
-  `live [--iterations N] [--interval S]` (`modules/systempulse/cli.py:53-229`). `live` clears and
+  `live [--iterations N] [--interval S]` (`modules/systempulse/cli.py:52-228`). `live` clears and
   redraws every `monitor.interval_seconds` (default 1.0); Ctrl+C prints "stopped." and returns
   exit 0. The overview prints "unsupported here - no sensors exposed through psutil" for
   temperature and "unsupported - psutil exposes no GPU API" for GPU rather than a zero
@@ -301,7 +301,7 @@ default.
 
 - Satisfied today: without `--run` the proposal prints and nothing executes ("print-only (the
   default): nothing ran."). With `--run`, `require_approval(..., destructive=True,
-  prompt_word="RUN")` decides (`modules/ai/cli.py:310-325`); the flag's own help says "Accepted and
+  prompt_word="RUN")` decides (`modules/ai/cli.py:309-324`); the flag's own help says "Accepted and
   ignored: only a typed RUN runs a command". A non-TTY stdin exits 6 having run nothing. A
   proposal containing a pipeline, `;` or a redirection is refused by `extract_proposal` before any
   approval is offered, printing "no command offered" and "nothing has run.", and execution is a
@@ -321,10 +321,10 @@ credential.
 - Satisfied today: `secrets.get_secret` returns `(value, source)` with source
   `env|keyring|file|none`, looking up `LEVIX_AI_API_KEY` (keyring service `levix`) before the
   keyring before `secrets.json` (`secrets.py:60-78`). `ai check` prints only the source and states
-  the value is never printed, logged or echoed (`ai/cli.py:489-491`). Configuration never supplies
+  the value is never printed, logged or echoed (`ai/cli.py:488-490`). Configuration never supplies
   secrets: `config set` refuses any key whose last component contains `key`, `token`, `secret` or
   `password` (exit 5) and `config show`/`list` mask such values as `set, hidden` — without
-  brackets, because the mask lands in a Rich table cell (`config_cmd.py:28,48,68,92`,
+  brackets, because the mask lands in a Rich table cell (`config_cmd.py:27,47,67,91`,
   `config.py:132`). Writes prefer the keyring and delete a stale
   file copy; the fallback file is created at `0600` and hardened on every write with
   `chmod 0600` plus, on Windows,
@@ -343,7 +343,7 @@ credential.
   but not yet *observed*: the first run of `ci.yml` that carries those three cases is the moment
   the claim becomes an observation.
   What used to be on this list is closed: `levix ai key set` and `levix ai key clear`
-  exist (`ai/cli.py:519-594`), so the hint in `config_cmd.py:92-99` points at a real command, and
+  exist (`ai/cli.py:518-593`), so the hint in `config_cmd.py:91-98` points at a real command, and
   `ai/core.py:42` no longer advertises a `levix secrets` command that was never built.
 - Verified by: `tests/modules/test_ai.py::test_key_from_the_environment_wins`,
   `::test_key_from_the_owner_only_file_when_no_keyring`, `::test_no_key_anywhere_reports_none`,
