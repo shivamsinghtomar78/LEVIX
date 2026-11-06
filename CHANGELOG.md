@@ -454,7 +454,7 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
 - `levix update` on this machine answers `could not check for updates: PyPI returned 404` and
   exits 8 (`EXIT_PROVIDER`): the name is unclaimed, and the command refuses to imply the user
   is up to date when it could not ask.
-- **CI ran nine times on 2026-11-05**, each time on the commit that changed it. Run #1
+- **CI ran nine times on 2026-11-05** (it has run twice since, recorded in the bullet after this one), each time on the commit that changed it. Run #1
   (`fcbcb22`): `Bare core install (no extras)` passed on `ubuntu-latest` in 31 s, so the
   no-extras install, the four exit-3 refusals and the wheel-content assertions are proven on
   a second platform; all four POSIX matrix columns stopped at `Types` on the Windows-only
@@ -529,8 +529,29 @@ code, and a second set found by GitHub Actions on platforms this laptop is not.
   the selection deselects. The run took 2 m 22 s from creation to its last job completing against
   run #8's 6 m 12 s, which is `cache: pip` doing its job: `2971bf9` leaves `pyproject.toml` alone,
   so the dependency cache run #8 warmed still matches.
-- What runs #4 through #9 do **not** prove: each column runs `pytest -m "not integration"` - 710
-  of run #6's 720 cases, 733 of run #7's 743, 738 of run #8's 748, 819 of run #9's 829 - so the ten
+- **Run #10 (`548a964`, run id `42106400806`) was green for a whole day without anyone reading
+  it, and the reason is the lesson.** The pages said "has run nine times" because that number was
+  being taken from this changelog, and this changelog records the runs someone sat down to read -
+  `GET /actions/runs?per_page=3` answers the same question in one call and had been answering it
+  the whole time. Its tree differs from run #9's in eight `.md` files and nothing else
+  (`git show --name-only` on `548a964` lists no `src/` or `tests/` path), so all seven jobs
+  `success`, four steps individually `success` on six named-runner columns and the wheel job green
+  re-proved the same 819 cases. It took 6 m 21 s on a tree that also leaves `pyproject.toml` alone,
+  which is the second half of the lesson: run #9's 2 m 22 s against run #8's 6 m 12 s is not the
+  `cache: pip` effect the bullet above states as a cause - two of the three trees are
+  dependency-identical and all three durations are different, so what varied was the queue.
+- **Run #11 (`528d3a2`, run id `42266493489`) is this tree, green: all seven jobs `success`.**
+  `Lint`, `Format`, `Types` and `Test suite` individually `success` on all six columns, each job
+  with a named runner (`1000000177` through `1000000183`), the wheel job's steps `success`, 5 m 26 s
+  from creation to the last job update. It is the first column to execute `terminal.new_console()`
+  at its 18 call sites, the rewritten scaffold, the rewritten example plugin and the twelve cases of
+  `tests/test_markup_safety.py`, so the markup behaviour the defect report turned up is now a
+  six-column result rather than a Windows one. Reading it cost six calls rather than the prescribed
+  two, because the first three caught `windows-latest / Python 3.12` with `Lint`, `Format` and
+  `Types` green and `Test suite` still un-concluded while the other five columns had finished; the
+  method's "read a finished run" rule is what the extra calls bought, not a way around it.
+- What runs #4 through #11 do **not** prove: each column runs `pytest -m "not integration"` - 710
+  of run #6's 720 cases, 733 of run #7's 743, 738 of run #8's 748, 819 of run #9's and #10's 829, 822 of run #11's 832 - so the ten
   device and screen cases (three `music` needing a device, two `arcade` and three `files`
   driving a screen, two `hacker` running the OS's own network tools) have only ever
   executed on Windows 11 here; no command has

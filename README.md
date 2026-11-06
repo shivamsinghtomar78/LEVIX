@@ -111,15 +111,17 @@ plugin SDK, security model, and the phase roadmap.
 
 Version 0.4.0 delivers the core engine, the dashboard and all seven official modules. What
 is *not* done is stated rather than implied: every hand run behind these pages was made on
-one Windows 11 machine, and the CI matrix that covers Linux and macOS has now run seven times
-- the fourth (`5b047ad`), fifth (`75daed2`) and sixth (`3d460df`) are all **green on all
-seven jobs**, so the
+one Windows 11 machine, and the CI matrix that covers Linux and macOS has now run eleven
+times - the fourth (`5b047ad`), fifth (`75daed2`), sixth (`3d460df`), eighth (`b748591`),
+ninth (`2971bf9`), tenth (`548a964`) and eleventh (`528d3a2`, this tree) are all **green on
+all seven jobs**, so the
 suite, the linter, the
 formatter and the type checker pass on Ubuntu, macOS and Windows at Python 3.12 and 3.13,
 and the no-extras wheel job passes on Ubuntu. The seventh (`c49d608`) ends `failure` without
 implicating the tree: six of its seven jobs are `success`, and `macos-latest / Python 3.12` was
 `cancelled` with no runner ever acquired - the run page says "The job was not acquired by Runner
-of type hosted even after multiple attempts". Its useful half is that it is the first run carrying
+of type hosted even after multiple attempts"; that column got a machine in #8 and in every run
+since. Its useful half is that it is the first run carrying
 `tests/test_update.py` and `tests/test_create_module.py`, so those 19 functions and 23 cases -
 including the one that generates a plugin and runs `pytest` inside the generated project in a
 child interpreter - executed on Ubuntu, Windows and macOS 3.13 and reached no failure.
@@ -127,7 +129,10 @@ Run #5 is the one that carries the log-redaction
 tests, including the case that opens a real rotating `levix.log` and reads the bytes back, so
 that promise now holds on three operating systems. Run #6 carries the key-store permission
 tests (`tests/test_secrets.py`), whose three POSIX file-mode cases skip on this machine and
-therefore *ran* - and did not fail - on the Ubuntu and macOS columns. What that does not buy:
+therefore *ran* - and did not fail - on the Ubuntu and macOS columns. Run #9 added the stream
+visualiser, run #10 changed documentation only (which is why it repeats run #9's result rather
+than extending it), and run #11 is the first to carry the console every command prints through.
+What that does not buy:
 the columns skip the
 ten device and OS-tool cases, nothing here has been hand-run on Linux or macOS, a green column
 proves a branch was reached rather than a POSIX behaviour observed, and the release workflow

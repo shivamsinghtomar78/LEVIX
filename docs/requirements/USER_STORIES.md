@@ -4,9 +4,9 @@ Written against the 0.4.0 tree as it stands. The hand verification behind every 
 Windows 11 with Python 3.12.10. GitHub Actions now executes the non-integration suite on
 Ubuntu and macOS too; its third run failed eight test functions that depend on the machine
 they run on, all eight were fixed, and its **fourth run (`5b047ad`), fifth (`75daed2`),
-sixth (`3d460df`), eighth (`b748591`) and ninth (`2971bf9`) are each green on all seven
-jobs**. So a story marked `Satisfied today` is a cross-platform result for the cases CI runs
-- run #9 is this tree, so the 81 stream-visualiser cases included - and still a Windows-only
+sixth (`3d460df`), eighth (`b748591`), ninth (`2971bf9`), tenth (`548a964`) and eleventh (`528d3a2`) are each
+green on all seven jobs**. So a story marked `Satisfied today` is a cross-platform result for the cases CI runs
+- run #11 is this tree, so the 81 stream-visualiser cases and the twelve markup cases included - and still a Windows-only
 result for the ten `integration` cases and for anything a runner
 never asserts. Run #6 is also the first that executed the POSIX file-mode cases of
 `tests/test_secrets.py` on Linux and macOS rather than skipping them here.
@@ -408,11 +408,11 @@ wrapping `levix` is safe.
   `TERM=dumb` / a non-TTY stdout (`terminal.detect`). History is best-effort: any failure inside
   `main._record` is swallowed and cannot change your code.
 - Not implemented: the pipeline is **green** but not **complete**. `.github/workflows/ci.yml`
-  ran nine times on 2026-11-05; its wheel job passed on Ubuntu each time, its third run was
+  ran eleven times, #1 to #10 on 2026-11-05 and #11 on 2026-11-06; its wheel job passed on Ubuntu each time, its third run was
   the first whose suite result could be trusted (see `docs/technology/PYTHON_PACKAGING.md`)
   and failed all six matrix columns on eight tests that depend on the machine they run on,
-  and its **fourth (`5b047ad`), fifth (`75daed2`), sixth (`3d460df`), eighth (`b748591`) and
-  ninth (`2971bf9`, this tree) runs are green on all
+  and its **fourth (`5b047ad`), fifth (`75daed2`), sixth (`3d460df`), eighth (`b748591`),
+  ninth (`2971bf9`), tenth (`548a964`) and eleventh (`528d3a2`, this tree) runs are green on all
   seven jobs**. What is still missing is not
   a red column: the ten `integration` cases have run on no platform but Windows 11, no column
   asserts the POSIX items in `ACCEPTANCE_CRITERIA.md` §What is not verified, and

@@ -180,7 +180,7 @@ Confirmed absent from this tree as of writing:
   state the workflows above reach, not today's. `levix update` therefore answers
   `could not check for updates: PyPI returned 404` and exits 8 - verified on this machine on
   2026-11-05 - because it refuses to imply you are up to date when it could not ask.
-- **A whole-suite run off this laptop.** The matrix itself is green - nine runs on 2026-11-05,
+- **A whole-suite run off this laptop.** The matrix itself is green - eleven runs, #1 to #10 on 2026-11-05 and #11 on 2026-11-06,
   with #4 (`5b047ad`), #5 (`75daed2`), #6 (`3d460df`), #8 (`b748591`) and #9 (`2971bf9`, this
   tree) each `success` on all seven jobs - but every column runs `-m "not integration"`, so the
   ten `integration` cases have still never executed anywhere other than Windows 11 here. The
